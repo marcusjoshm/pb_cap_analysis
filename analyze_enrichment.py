@@ -137,15 +137,14 @@ def find_gaussian_peaks(data, n_bins=50):
 
 
 def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensity,
-                                          g3bp1_intensity, image_shape, method='gaussian_peaks'):
+                                          image_shape, method='gaussian_peaks'):
     """
-    Analyze Cap and G3BP1 enrichment for each particle using ROI definitions.
+    Analyze Cap enrichment for each particle using ROI definitions.
 
     Args:
         mask_rois: List of ROI dictionaries for particles
         perimeter_rois: List of ROI dictionaries for perimeters
         cap_intensity: Cap intensity image
-        g3bp1_intensity: G3BP1 intensity image
         image_shape: Shape of the images
         method: 'minimum' or 'gaussian_peaks'
 
@@ -166,9 +165,6 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
         cap_particle_intensities = cap_intensity[particle_mask > 0]
         cap_perimeter_intensities = cap_intensity[perimeter_mask > 0]
 
-        g3bp1_particle_intensities = g3bp1_intensity[particle_mask > 0]
-        g3bp1_perimeter_intensities = g3bp1_intensity[perimeter_mask > 0]
-
         # Skip if no pixels found
         if len(cap_particle_intensities) == 0 or len(cap_perimeter_intensities) == 0:
             continue
@@ -176,20 +172,15 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
         # Determine background value based on method
         if method == 'minimum':
             cap_background = np.min(cap_perimeter_intensities)
-            g3bp1_background = np.min(g3bp1_perimeter_intensities)
             cap_peak_info = None
-            g3bp1_peak_info = None
         elif method == 'gaussian_peaks':
             cap_peak_info = find_gaussian_peaks(cap_perimeter_intensities)
-            g3bp1_peak_info = find_gaussian_peaks(g3bp1_perimeter_intensities)
             cap_background = cap_peak_info['background_value'] if cap_peak_info else np.mean(cap_perimeter_intensities)
-            g3bp1_background = g3bp1_peak_info['background_value'] if g3bp1_peak_info else np.mean(g3bp1_perimeter_intensities)
         else:
             raise ValueError(f"Unknown method: {method}")
 
         # Background-subtracted intensities
         cap_bg_subtracted = cap_particle_intensities - cap_background
-        g3bp1_bg_subtracted = g3bp1_particle_intensities - g3bp1_background
 
         # Calculate statistics
         particle_result = {
@@ -207,16 +198,6 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
             'cap_perimeter_mean': np.mean(cap_perimeter_intensities),
             'cap_perimeter_std': np.std(cap_perimeter_intensities),
             'cap_peak_info': cap_peak_info,
-
-            # G3BP1 statistics
-            'g3bp1_mean_raw': np.mean(g3bp1_particle_intensities),
-            'g3bp1_median_raw': np.median(g3bp1_particle_intensities),
-            'g3bp1_background': g3bp1_background,
-            'g3bp1_mean_bg_subtracted': np.mean(g3bp1_bg_subtracted),
-            'g3bp1_median_bg_subtracted': np.median(g3bp1_bg_subtracted),
-            'g3bp1_perimeter_mean': np.mean(g3bp1_perimeter_intensities),
-            'g3bp1_perimeter_std': np.std(g3bp1_perimeter_intensities),
-            'g3bp1_peak_info': g3bp1_peak_info,
         }
 
         results.append(particle_result)
@@ -361,39 +342,33 @@ def main():
 
         # Load intensity images
         cap_files = [f for f in data_dir.glob("*.tif") if "cap" in f.name.lower() and "intensity" in f.name.lower()]
-        g3bp1_files = [f for f in data_dir.glob("*.tif") if "g3bp1" in f.name.lower() and "intensity" in f.name.lower()]
 
-        if len(cap_files) == 0 or len(g3bp1_files) == 0:
-            print(f"  Skipping {dataset_name}: Missing intensity images")
+        if len(cap_files) == 0:
+            print(f"  Skipping {dataset_name}: Missing Cap intensity image")
             print()
             continue
 
         cap_intensity = load_image(str(cap_files[0]))
-        g3bp1_intensity = load_image(str(g3bp1_files[0]))
         image_shape = cap_intensity.shape
 
         # Load ROI files
-        mask_roi_files = [f for f in data_dir.glob("*.zip") if "mask" in f.name.lower() and "dilated" not in f.name.lower() and "perimeter" not in f.name.lower()]
-        perimeter_roi_files = [f for f in data_dir.glob("*.zip") if "perimeter" in f.name.lower()]
+        mask_roi_files = [f for f in data_dir.glob("*.zip") if "mask" in f.name.lower() and "dilated" not in f.name.lower()]
+        dilated_roi_files = [f for f in data_dir.glob("*.zip") if "dilated" in f.name.lower() and "mask" in f.name.lower()]
 
-        # If no perimeter ROI files, look for dilated mask ROI files
-        if len(perimeter_roi_files) == 0:
-            perimeter_roi_files = [f for f in data_dir.glob("*.zip") if "dilated" in f.name.lower()]
-
-        if len(mask_roi_files) == 0 or len(perimeter_roi_files) == 0:
+        if len(mask_roi_files) == 0 or len(dilated_roi_files) == 0:
             print(f"  Skipping {dataset_name}: Missing ROI files")
             print()
             continue
 
         print(f"  Loading ROIs from: {mask_roi_files[0].name}")
-        print(f"  Loading perimeter ROIs from: {perimeter_roi_files[0].name}")
+        print(f"  Loading dilated ROIs from: {dilated_roi_files[0].name}")
 
         mask_rois = load_imagej_rois(str(mask_roi_files[0]))
-        perimeter_rois = load_imagej_rois(str(perimeter_roi_files[0]))
+        dilated_rois = load_imagej_rois(str(dilated_roi_files[0]))
 
         # Analyze enrichment using ROIs
         results = analyze_particle_enrichment_from_rois(
-            mask_rois, perimeter_rois, cap_intensity, g3bp1_intensity,
+            mask_rois, dilated_rois, cap_intensity,
             image_shape, method=method
         )
 
