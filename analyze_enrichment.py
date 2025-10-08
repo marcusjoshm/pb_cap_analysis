@@ -326,18 +326,47 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
 
 def main():
     """Main analysis function."""
-    base_dir = "/Volumes/NX-01-A/2025-10-08_test_data"
+    import sys
 
-    for dataset_name, method in [("Untreated", "gaussian_peaks"), ("As Treated", "gaussian_peaks")]:
+    # Get base directory from command line argument or use default
+    if len(sys.argv) > 1:
+        base_dir = sys.argv[1]
+    else:
+        base_dir = "/Volumes/NX-01-A/2025-10-08_test_data"
+
+    base_path = Path(base_dir)
+
+    if not base_path.exists():
+        print(f"Error: Base directory '{base_dir}' does not exist")
+        return
+
+    # Find all subdirectories containing .tif files
+    subdirs = [d for d in base_path.iterdir() if d.is_dir()]
+
+    if len(subdirs) == 0:
+        print(f"Error: No subdirectories found in '{base_dir}'")
+        return
+
+    print(f"Found {len(subdirs)} subdirectories to analyze")
+    print()
+
+    # Process each subdirectory
+    for data_dir in subdirs:
+        dataset_name = data_dir.name
+        method = "gaussian_peaks"  # Default method
+
         print("=" * 60)
         print(f"Analyzing {dataset_name} Dataset - Method: {method}")
         print("=" * 60)
 
-        data_dir = Path(base_dir) / dataset_name
-
         # Load intensity images
         cap_files = [f for f in data_dir.glob("*.tif") if "cap" in f.name.lower() and "intensity" in f.name.lower()]
         g3bp1_files = [f for f in data_dir.glob("*.tif") if "g3bp1" in f.name.lower() and "intensity" in f.name.lower()]
+
+        if len(cap_files) == 0 or len(g3bp1_files) == 0:
+            print(f"  Skipping {dataset_name}: Missing intensity images")
+            print()
+            continue
 
         cap_intensity = load_image(str(cap_files[0]))
         g3bp1_intensity = load_image(str(g3bp1_files[0]))
@@ -347,9 +376,14 @@ def main():
         mask_roi_files = [f for f in data_dir.glob("*.zip") if "mask" in f.name.lower() and "dilated" not in f.name.lower() and "perimeter" not in f.name.lower()]
         perimeter_roi_files = [f for f in data_dir.glob("*.zip") if "perimeter" in f.name.lower()]
 
-        # If no perimeter ROI files, look for dilated mask ROI files (for As Treated)
+        # If no perimeter ROI files, look for dilated mask ROI files
         if len(perimeter_roi_files) == 0:
             perimeter_roi_files = [f for f in data_dir.glob("*.zip") if "dilated" in f.name.lower()]
+
+        if len(mask_roi_files) == 0 or len(perimeter_roi_files) == 0:
+            print(f"  Skipping {dataset_name}: Missing ROI files")
+            print()
+            continue
 
         print(f"  Loading ROIs from: {mask_roi_files[0].name}")
         print(f"  Loading perimeter ROIs from: {perimeter_roi_files[0].name}")
