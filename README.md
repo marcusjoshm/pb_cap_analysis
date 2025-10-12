@@ -81,6 +81,22 @@ python analyze_enrichment.py
 
 - No arguments: Uses default path `/Volumes/NX-01-A/2025-10-08_test_data`
 - One argument: Custom base directory path containing subdirectories with data
+- `--bg-factor`: Multiplication factor for background subtraction (default: 1.0)
+
+**Examples with background multiplication factor:**
+
+```bash
+# Apply 0.8x multiplication to background values (more conservative background subtraction)
+python analyze_enrichment.py /path/to/your/data --bg-factor 0.8
+
+# Apply 1.2x multiplication to background values (more aggressive background subtraction)
+python analyze_enrichment.py /path/to/your/data --bg-factor 1.2
+
+# Default behavior (1.0x - no adjustment)
+python analyze_enrichment.py /path/to/your/data
+```
+
+The `--bg-factor` parameter allows you to adjust the background subtraction stringency. Values < 1.0 result in more conservative background estimates (less background subtracted), while values > 1.0 result in more aggressive background subtraction.
 
 This script:
 
@@ -124,6 +140,7 @@ Expected directory structure:
   - Raw and background-subtracted intensities
   - Background values
   - Perimeter statistics
+  - **Note**: Negative values (from background subtraction) are replaced with empty cells in the CSV
 - `{dataset}_perimeter_histograms.png` - Histogram visualizations showing detected peaks
 
 ## Methods
@@ -139,6 +156,23 @@ Expected directory structure:
 2. **Minimum Value**:
    - Uses minimum perimeter intensity as background
    - Simpler but may overestimate enrichment if minimum is anomalously low
+
+### Background Multiplication Factor
+
+The `--bg-factor` parameter allows fine-tuning of background subtraction:
+- **Values < 1.0** (e.g., 0.8): More conservative - reduces the background value before subtraction, resulting in lower enrichment scores
+- **Values = 1.0**: Default - uses the detected background value as-is
+- **Values > 1.0** (e.g., 1.2): More aggressive - increases the background value before subtraction, resulting in higher enrichment scores
+
+This is useful when you want to adjust for systematic over- or under-estimation of background.
+
+### Negative Value Handling
+
+After background subtraction, some particles may have negative enrichment values (particle intensity < background). In the output CSV:
+- **Negative values are replaced with empty cells**
+- This prevents misleading negative enrichment scores
+- Empty cells make it easy to identify particles where signal is below background
+- All other numeric and non-numeric values are preserved as-is
 
 ## Dependencies
 
