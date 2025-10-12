@@ -10,6 +10,7 @@ from PIL import Image
 import tifffile
 import matplotlib.pyplot as plt
 import glob
+from scipy import ndimage
 
 
 def load_image(filepath):
@@ -36,7 +37,7 @@ def find_file(directory, keywords):
     raise FileNotFoundError(f"No file found with keywords: {keywords}")
 
 
-def extract_intensity_data(data_dir, save_perimeter_mask=True, visualize=True):
+def extract_intensity_data(data_dir, save_perimeter_mask=True, visualize=True, additional_dilation=2):
     """
     Extract microscopy intensity data from a dataset directory.
 
@@ -73,6 +74,7 @@ def extract_intensity_data(data_dir, save_perimeter_mask=True, visualize=True):
     # Load images
     mask = load_image(mask_file)
     dilated_mask = load_image(dilated_mask_file)
+    dilated_mask = ndimage.binary_dilation(dilated_mask, iterations=additional_dilation).astype(np.uint8)
     cap_intensity = load_image(cap_file)
     g3bp1_intensity = load_image(g3bp1_file)
 

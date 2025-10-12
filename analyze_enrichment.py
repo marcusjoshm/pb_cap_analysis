@@ -92,7 +92,7 @@ def find_gaussian_peaks(data, n_bins=50):
 
     # Smooth the histogram slightly to reduce noise
     from scipy.ndimage import gaussian_filter1d
-    hist_smooth = gaussian_filter1d(hist.astype(float), sigma=1)
+    hist_smooth = gaussian_filter1d(hist.astype(float), sigma=2)
 
     # Find peaks in the histogram
     peaks, properties = find_peaks(hist_smooth, prominence=np.max(hist_smooth) * 0.1)
@@ -137,7 +137,7 @@ def find_gaussian_peaks(data, n_bins=50):
 
 
 def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensity,
-                                          image_shape, method='gaussian_peaks'):
+                                          image_shape, method='gaussian_peaks', bg_multiplication_factor=1.0):
     """
     Analyze Cap enrichment for each particle using ROI definitions.
 
@@ -147,6 +147,7 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
         cap_intensity: Cap intensity image
         image_shape: Shape of the images
         method: 'minimum' or 'gaussian_peaks'
+        bg_multiplication_factor: Multiplication factor for background value (default 1.0)
 
     Returns:
         Dictionary with per-particle analysis results
@@ -171,13 +172,16 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
 
         # Determine background value based on method
         if method == 'minimum':
-            cap_background = np.min(cap_perimeter_intensities)
+            cap_background_raw = np.min(cap_perimeter_intensities)
             cap_peak_info = None
         elif method == 'gaussian_peaks':
             cap_peak_info = find_gaussian_peaks(cap_perimeter_intensities)
-            cap_background = cap_peak_info['background_value'] if cap_peak_info else np.mean(cap_perimeter_intensities)
+            cap_background_raw = cap_peak_info['background_value'] if cap_peak_info else np.mean(cap_perimeter_intensities)
         else:
             raise ValueError(f"Unknown method: {method}")
+
+        # Apply multiplication factor to background value
+        cap_background = cap_background_raw * bg_multiplication_factor
 
         # Background-subtracted intensities
         cap_bg_subtracted = cap_particle_intensities - cap_background
@@ -298,8 +302,15 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
         writer.writeheader()
 
         for particle in particles:
-            # Filter out peak_info
-            row = {k: v for k, v in particle.items() if 'peak_info' not in k}
+            # Filter out peak_info and convert negative values to empty strings
+            row = {}
+            for k, v in particle.items():
+                if 'peak_info' not in k:
+                    # If the value is numeric and negative, use empty string
+                    if isinstance(v, (int, float, np.integer, np.floating)) and v < 0:
+                        row[k] = ''
+                    else:
+                        row[k] = v
             writer.writerow(row)
 
     print(f"  Saved: {output_path.name}")
@@ -307,13 +318,19 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
 
 def main():
     """Main analysis function."""
-    import sys
+    import argparse
 
-    # Get base directory from command line argument or use default
-    if len(sys.argv) > 1:
-        base_dir = sys.argv[1]
-    else:
-        base_dir = "/Volumes/NX-01-A/2025-10-08_test_data"
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='P-body Cap Enrichment Analysis')
+    parser.add_argument('base_dir', nargs='?', default="/Volumes/NX-01-A/2025-10-08_test_data",
+                       help='Base directory containing subdirectories with microscopy data')
+    parser.add_argument('--bg-factor', type=float, default=1.0,
+                       help='Background subtraction multiplication factor (default: 1.0)')
+
+    args = parser.parse_args()
+
+    base_dir = args.base_dir
+    bg_multiplication_factor = args.bg_factor
 
     base_path = Path(base_dir)
 
@@ -329,6 +346,7 @@ def main():
         return
 
     print(f"Found {len(subdirs)} subdirectories to analyze")
+    print(f"Background multiplication factor: {bg_multiplication_factor}")
     print()
 
     # Process each subdirectory
@@ -338,6 +356,7 @@ def main():
 
         print("=" * 60)
         print(f"Analyzing {dataset_name} Dataset - Method: {method}")
+        print(f"Background multiplication factor: {bg_multiplication_factor}")
         print("=" * 60)
 
         # Load intensity images
@@ -369,7 +388,7 @@ def main():
         # Analyze enrichment using ROIs
         results = analyze_particle_enrichment_from_rois(
             mask_rois, dilated_rois, cap_intensity,
-            image_shape, method=method
+            image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor
         )
 
         # Print summary
