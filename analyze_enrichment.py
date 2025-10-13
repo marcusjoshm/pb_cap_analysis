@@ -168,15 +168,14 @@ def find_gaussian_peaks(data, n_bins=50, max_background=None):
     from scipy.ndimage import gaussian_filter1d
     hist_smooth = gaussian_filter1d(hist.astype(float), sigma=2)
 
-    # Find peaks in the histogram with lower prominence to catch near-zero peaks
-    peaks, properties = find_peaks(hist_smooth, prominence=np.max(hist_smooth) * 0.05)
+    # Find peaks with reasonable prominence to focus on significant features
+    # Using 15% of max as minimum prominence to avoid noise
+    min_prominence = np.max(hist_smooth) * 0.15
+    peaks, properties = find_peaks(hist_smooth, prominence=min_prominence)
 
     if len(peaks) == 0:
-        # Try even lower prominence threshold
-        peaks, properties = find_peaks(hist_smooth, prominence=1)
-
-    if len(peaks) == 0:
-        # Still no peaks found, use the bin with maximum count as the peak
+        # If no prominent peaks found, use the bin with maximum count as the peak
+        # This is more robust than lowering the prominence threshold
         peak_idx = np.argmax(hist_smooth)
         background_value = bin_centers[peak_idx]
         return {
