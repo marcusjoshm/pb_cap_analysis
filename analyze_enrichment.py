@@ -41,9 +41,81 @@ def load_imagej_rois(roi_zip_path):
                 rois.append({
                     'name': name,
                     'roi': roi,
-                    'coordinates': roi.coordinates()
+                    'coordinates': roi.coordinates(),
+                    'bytes': roi_bytes  # Store original bytes for ImageJ processing
                 })
     return rois
+
+
+def enlarge_rois_with_imagej(rois, pixels=5):
+    """
+    Enlarge ROIs using binary dilation (equivalent to ImageJ's RoiEnlarger).
+
+    Args:
+        rois: List of ROI dictionaries from load_imagej_rois
+        pixels: Number of pixels to enlarge (positive) or shrink (negative)
+
+    Returns:
+        List of enlarged ROI dictionaries with updated coordinates
+
+    Note: This uses scipy's binary dilation which produces similar results to
+    ImageJ's RoiEnlarger but is faster and doesn't require Java/ImageJ initialization.
+    """
+    print(f"  Enlarging ROIs by {pixels} pixels using binary dilation...")
+
+    # We need image_shape to create masks. Get it from the first successful coordinate conversion
+    # For now, we'll determine it from the max coordinates
+    max_x = max_y = 0
+    for roi_dict in rois:
+        coords = roi_dict['coordinates']
+        if len(coords) > 0:
+            max_x = max(max_x, int(np.max(coords[:, 0])))
+            max_y = max(max_y, int(np.max(coords[:, 1])))
+
+    # Add some padding to ensure ROIs fit
+    image_shape = (max_y + 100, max_x + 100)
+
+    enlarged_rois = []
+
+    for roi_dict in rois:
+        # Convert ROI to mask
+        mask = roi_to_mask(roi_dict['coordinates'], image_shape)
+
+        # Create structuring element for dilation
+        structure = ndimage.generate_binary_structure(2, 1)  # 4-connected
+
+        # Enlarge (dilate) or shrink (erode) the mask
+        if pixels > 0:
+            enlarged_mask = ndimage.binary_dilation(mask, structure=structure,
+                                                   iterations=pixels).astype(np.uint8)
+        elif pixels < 0:
+            enlarged_mask = ndimage.binary_erosion(mask, structure=structure,
+                                                  iterations=abs(pixels)).astype(np.uint8)
+        else:
+            enlarged_mask = mask
+
+        # Extract new coordinates from the enlarged mask boundary
+        from skimage.measure import find_contours
+        contours = find_contours(enlarged_mask, 0.5)
+
+        if len(contours) > 0:
+            # Use the largest contour
+            largest_contour = max(contours, key=len)
+            # Convert from (row, col) to (x, y)
+            new_coords = np.column_stack((largest_contour[:, 1], largest_contour[:, 0]))
+        else:
+            # If no contour found, use original coordinates
+            new_coords = roi_dict['coordinates']
+
+        enlarged_rois.append({
+            'name': roi_dict['name'],
+            'roi': roi_dict['roi'],  # Keep original roi object
+            'coordinates': new_coords,
+            'bytes': roi_dict.get('bytes', b'')
+        })
+
+    print(f"  Successfully enlarged {len(enlarged_rois)} ROIs by {pixels} pixels")
+    return enlarged_rois
 
 
 def roi_to_mask(roi_coords, image_shape):
@@ -107,31 +179,33 @@ def find_gaussian_peaks(data, n_bins=50):
             'background_value': np.mean(data)
         }
 
-    # Sort peaks by prominence (highest first)
-    peak_prominences = properties['prominences']
-    sorted_indices = np.argsort(peak_prominences)[::-1]
-    peaks = peaks[sorted_indices]
-
     # Get the peak positions (intensity values)
     peak_positions = bin_centers[peaks]
 
+    # Sort peaks by their position (intensity value) to find the leftmost peak
+    sorted_by_position = np.argsort(peak_positions)
+
     # Determine background value
-    if len(peaks) >= 2:
-        # Two or more peaks: use the lower peak value
-        background_value = min(peak_positions[0], peak_positions[1])
-    elif len(peaks) == 1:
-        # Single peak: use that peak value
-        background_value = peak_positions[0]
+    # Strategy: Prioritize the leftmost (lowest intensity) peak as it typically represents background
+    if len(peaks) >= 1:
+        # Use the leftmost (lowest intensity) peak as background
+        background_value = peak_positions[sorted_by_position[0]]
     else:
         background_value = np.mean(data)
 
+    # For reporting, also sort by prominence to return the most prominent peaks
+    peak_prominences = properties['prominences']
+    sorted_indices = np.argsort(peak_prominences)[::-1]
+    peaks_sorted_by_prominence = peaks[sorted_indices]
+    peak_positions_for_report = bin_centers[peaks_sorted_by_prominence]
+
     return {
         'n_peaks': len(peaks),
-        'peaks': peak_positions[:2] if len(peaks) >= 2 else peak_positions,
+        'peaks': peak_positions_for_report[:2] if len(peaks) >= 2 else peak_positions_for_report,
         'hist': hist,
         'bin_centers': bin_centers,
         'hist_smooth': hist_smooth,
-        'peak_indices': peaks[:2] if len(peaks) >= 2 else peaks,
+        'peak_indices': peaks_sorted_by_prominence[:2] if len(peaks) >= 2 else peaks_sorted_by_prominence,
         'background_value': background_value
     }
 
@@ -326,11 +400,14 @@ def main():
                        help='Base directory containing subdirectories with microscopy data')
     parser.add_argument('--bg-factor', type=float, default=1.0,
                        help='Background subtraction multiplication factor (default: 1.0)')
+    parser.add_argument('--enlarge-rois', type=int, default=0,
+                       help='Number of pixels to enlarge dilated ROIs (default: 0, no enlargement)')
 
     args = parser.parse_args()
 
     base_dir = args.base_dir
     bg_multiplication_factor = args.bg_factor
+    roi_enlargement_pixels = args.enlarge_rois
 
     base_path = Path(base_dir)
 
@@ -347,6 +424,10 @@ def main():
 
     print(f"Found {len(subdirs)} subdirectories to analyze")
     print(f"Background multiplication factor: {bg_multiplication_factor}")
+    if roi_enlargement_pixels > 0:
+        print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
+    else:
+        print("ROI enlargement: disabled")
     print()
 
     # Process each subdirectory
@@ -357,6 +438,8 @@ def main():
         print("=" * 60)
         print(f"Analyzing {dataset_name} Dataset - Method: {method}")
         print(f"Background multiplication factor: {bg_multiplication_factor}")
+        if roi_enlargement_pixels > 0:
+            print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
         print("=" * 60)
 
         # Load intensity images
@@ -385,9 +468,15 @@ def main():
         mask_rois = load_imagej_rois(str(mask_roi_files[0]))
         dilated_rois = load_imagej_rois(str(dilated_roi_files[0]))
 
+        # Optionally further enlarge the dilated ROIs using ImageJ's RoiEnlarger
+        if roi_enlargement_pixels > 0:
+            perimeter_rois = enlarge_rois_with_imagej(dilated_rois, pixels=roi_enlargement_pixels)
+        else:
+            perimeter_rois = dilated_rois
+
         # Analyze enrichment using ROIs
         results = analyze_particle_enrichment_from_rois(
-            mask_rois, dilated_rois, cap_intensity,
+            mask_rois, perimeter_rois, cap_intensity,
             image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor
         )
 
