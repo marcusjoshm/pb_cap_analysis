@@ -82,8 +82,10 @@ python analyze_enrichment.py
 - No arguments: Uses default path `/Volumes/NX-01-A/2025-10-08_test_data`
 - One argument: Custom base directory path containing subdirectories with data
 - `--bg-factor`: Multiplication factor for background subtraction (default: 1.0)
+- `--max-background`: Maximum background value threshold. Only peaks below this value will be considered for background (default: None, no constraint)
+- `--enlarge-rois`: Number of pixels to enlarge dilated ROIs using binary dilation (default: 0, no enlargement)
 
-**Examples with background multiplication factor:**
+**Examples with command-line options:**
 
 ```bash
 # Apply 0.8x multiplication to background values (more conservative background subtraction)
@@ -92,11 +94,30 @@ python analyze_enrichment.py /path/to/your/data --bg-factor 0.8
 # Apply 1.2x multiplication to background values (more aggressive background subtraction)
 python analyze_enrichment.py /path/to/your/data --bg-factor 1.2
 
-# Default behavior (1.0x - no adjustment)
+# Force background peak selection below 100 (useful when you know true background is low)
+python analyze_enrichment.py /path/to/your/data --max-background 100
+
+# Enlarge perimeter ROIs by 5 pixels to capture more background
+python analyze_enrichment.py /path/to/your/data --enlarge-rois 5
+
+# Combine multiple options
+python analyze_enrichment.py /path/to/your/data --bg-factor 1.0 --max-background 100 --enlarge-rois 5
+
+# Default behavior (1.0x factor, no constraint, no enlargement)
 python analyze_enrichment.py /path/to/your/data
 ```
 
-The `--bg-factor` parameter allows you to adjust the background subtraction stringency. Values < 1.0 result in more conservative background estimates (less background subtracted), while values > 1.0 result in more aggressive background subtraction.
+**Parameter descriptions:**
+
+- **`--bg-factor`**: Adjusts background subtraction stringency. Values < 1.0 result in more conservative background estimates (less background subtracted), while values > 1.0 result in more aggressive background subtraction.
+
+- **`--max-background`**: Constrains background peak selection to only consider peaks below this threshold. When set:
+  - Selects the most prominent peak below the threshold
+  - If no peaks detected below threshold, uses the histogram bin with highest frequency below threshold
+  - Useful for datasets where you know the true background should be low (e.g., < 100)
+  - When not set (default), uses the leftmost (lowest intensity) detected peak
+
+- **`--enlarge-rois`**: Expands the perimeter ROIs by the specified number of pixels using binary dilation. This increases the region used for background estimation, which can be helpful when the default perimeter is too narrow.
 
 This script:
 
@@ -148,14 +169,28 @@ Expected directory structure:
 ### Background Subtraction Approaches
 
 1. **Gaussian Peak Detection** (default):
-   - Analyzes perimeter intensity histogram
-   - Detects Gaussian peaks
-   - Single peak → uses that peak as background
-   - Multiple peaks → uses lower peak as background (assumes higher peak is from nearby enriched structure)
+   - Analyzes perimeter intensity histogram with range starting at 0 to capture near-zero peaks
+   - Uses lower prominence threshold (0.05) to detect subtle peaks
+   - Detects Gaussian peaks in smoothed histogram
+   - **Default mode** (no `--max-background`): Uses the leftmost (lowest intensity) detected peak as background
+   - **Constrained mode** (with `--max-background`): Only considers peaks below the specified threshold
+     - Selects the most prominent peak below the threshold
+     - If no peaks detected, uses the histogram bin with highest frequency below the threshold
+     - Ensures background values stay within expected range
+   - Multiple peaks → assumes higher peak is from nearby enriched structure
+   - Fallback: If no peaks detected at all, uses the maximum of the histogram as background
 
 2. **Minimum Value**:
    - Uses minimum perimeter intensity as background
    - Simpler but may overestimate enrichment if minimum is anomalously low
+
+### ROI Enlargement
+
+The `--enlarge-rois` parameter allows expanding perimeter ROIs for background estimation:
+- Uses binary dilation with 4-connected structuring element (equivalent to ImageJ's RoiEnlarger)
+- Expands the perimeter region by the specified number of pixels
+- Useful when the default dilated mask doesn't provide enough perimeter pixels for reliable background estimation
+- Example: `--enlarge-rois 5` expands each perimeter ROI by 5 pixels in all directions
 
 ### Background Multiplication Factor
 
@@ -165,6 +200,16 @@ The `--bg-factor` parameter allows fine-tuning of background subtraction:
 - **Values > 1.0** (e.g., 1.2): More aggressive - increases the background value before subtraction, resulting in higher enrichment scores
 
 This is useful when you want to adjust for systematic over- or under-estimation of background.
+
+### Maximum Background Constraint
+
+The `--max-background` parameter constrains background peak selection:
+- Ensures background values don't exceed a known threshold for your dataset
+- Useful when you have prior knowledge about expected background intensity ranges
+- Example: If you know true background is around 20 and never exceeds 100, use `--max-background 100`
+- Helps avoid selecting spurious high-intensity peaks as background
+- When used, the algorithm prioritizes peaks below the threshold based on prominence
+- Fallback uses the highest frequency histogram bin below the threshold if no peaks are detected
 
 ### Negative Value Handling
 
