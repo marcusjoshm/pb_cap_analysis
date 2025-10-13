@@ -47,7 +47,7 @@ def load_imagej_rois(roi_zip_path):
     return rois
 
 
-def enlarge_rois_with_imagej(rois, pixels=5):
+def enlarge_rois_with_imagej(rois, pixels):
     """
     Enlarge ROIs using binary dilation (equivalent to ImageJ's RoiEnlarger).
 
