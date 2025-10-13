@@ -144,13 +144,14 @@ def gaussian(x, amp, mean, std):
     return amp * np.exp(-((x - mean) ** 2) / (2 * std ** 2))
 
 
-def find_gaussian_peaks(data, n_bins=50):
+def find_gaussian_peaks(data, n_bins=50, max_background=None):
     """
     Find Gaussian peaks in a histogram of the data.
 
     Args:
         data: Array of intensity values
         n_bins: Number of bins for histogram
+        max_background: If specified, only consider peaks below this value for background
 
     Returns:
         Dictionary with peak information and histogram data
@@ -158,40 +159,67 @@ def find_gaussian_peaks(data, n_bins=50):
     if len(data) == 0:
         return None
 
-    # Create histogram
-    hist, bin_edges = np.histogram(data, bins=n_bins)
+    # Create histogram with range starting at 0 to capture near-zero peaks
+    data_max = float(np.max(data))
+    hist, bin_edges = np.histogram(data, bins=n_bins, range=(0, data_max))
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
     # Smooth the histogram slightly to reduce noise
     from scipy.ndimage import gaussian_filter1d
     hist_smooth = gaussian_filter1d(hist.astype(float), sigma=2)
 
-    # Find peaks in the histogram
-    peaks, properties = find_peaks(hist_smooth, prominence=np.max(hist_smooth) * 0.1)
+    # Find peaks in the histogram with lower prominence to catch near-zero peaks
+    peaks, properties = find_peaks(hist_smooth, prominence=np.max(hist_smooth) * 0.05)
 
     if len(peaks) == 0:
-        # No clear peaks found, use mean as fallback
+        # Try even lower prominence threshold
+        peaks, properties = find_peaks(hist_smooth, prominence=1)
+
+    if len(peaks) == 0:
+        # Still no peaks found, use the bin with maximum count as the peak
+        peak_idx = np.argmax(hist_smooth)
+        background_value = bin_centers[peak_idx]
         return {
-            'n_peaks': 0,
-            'peaks': [],
+            'n_peaks': 1,
+            'peaks': [background_value],
             'hist': hist,
             'bin_centers': bin_centers,
-            'background_value': np.mean(data)
+            'hist_smooth': hist_smooth,
+            'background_value': background_value
         }
 
     # Get the peak positions (intensity values)
     peak_positions = bin_centers[peaks]
-
-    # Sort peaks by their position (intensity value) to find the leftmost peak
-    sorted_by_position = np.argsort(peak_positions)
+    peak_prominences = properties['prominences']
 
     # Determine background value
-    # Strategy: Prioritize the leftmost (lowest intensity) peak as it typically represents background
-    if len(peaks) >= 1:
-        # Use the leftmost (lowest intensity) peak as background
-        background_value = peak_positions[sorted_by_position[0]]
+    if max_background is not None:
+        # Constrained mode: Only consider peaks below max_background threshold
+        peaks_below_threshold = peak_positions < max_background
+
+        if np.any(peaks_below_threshold):
+            # Select the most prominent peak below threshold
+            prominences_below = peak_prominences[peaks_below_threshold]
+            positions_below = peak_positions[peaks_below_threshold]
+            most_prominent_idx = np.argmax(prominences_below)
+            background_value = positions_below[most_prominent_idx]
+        else:
+            # No peaks below threshold, find bin with highest count below threshold
+            bins_below_threshold = bin_centers < max_background
+            if np.any(bins_below_threshold):
+                # Get histogram counts for bins below threshold
+                hist_below = hist[bins_below_threshold]
+                bin_centers_below = bin_centers[bins_below_threshold]
+                max_count_idx = np.argmax(hist_below)
+                background_value = bin_centers_below[max_count_idx]
+            else:
+                # Fallback: use the leftmost peak
+                sorted_by_position = np.argsort(peak_positions)
+                background_value = peak_positions[sorted_by_position[0]]
     else:
-        background_value = np.mean(data)
+        # Default mode: Use the leftmost (lowest intensity) peak
+        sorted_by_position = np.argsort(peak_positions)
+        background_value = peak_positions[sorted_by_position[0]]
 
     # For reporting, also sort by prominence to return the most prominent peaks
     peak_prominences = properties['prominences']
@@ -211,7 +239,8 @@ def find_gaussian_peaks(data, n_bins=50):
 
 
 def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensity,
-                                          image_shape, method='gaussian_peaks', bg_multiplication_factor=1.0):
+                                          image_shape, method='gaussian_peaks',
+                                          bg_multiplication_factor=1.0, max_background=None):
     """
     Analyze Cap enrichment for each particle using ROI definitions.
 
@@ -249,7 +278,7 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
             cap_background_raw = np.min(cap_perimeter_intensities)
             cap_peak_info = None
         elif method == 'gaussian_peaks':
-            cap_peak_info = find_gaussian_peaks(cap_perimeter_intensities)
+            cap_peak_info = find_gaussian_peaks(cap_perimeter_intensities, max_background=max_background)
             cap_background_raw = cap_peak_info['background_value'] if cap_peak_info else np.mean(cap_perimeter_intensities)
         else:
             raise ValueError(f"Unknown method: {method}")
@@ -402,12 +431,15 @@ def main():
                        help='Background subtraction multiplication factor (default: 1.0)')
     parser.add_argument('--enlarge-rois', type=int, default=0,
                        help='Number of pixels to enlarge dilated ROIs (default: 0, no enlargement)')
+    parser.add_argument('--max-background', type=float, default=None,
+                       help='Maximum background value threshold. Only peaks below this value will be considered for background (default: None, no constraint)')
 
     args = parser.parse_args()
 
     base_dir = args.base_dir
     bg_multiplication_factor = args.bg_factor
     roi_enlargement_pixels = args.enlarge_rois
+    max_background = args.max_background
 
     base_path = Path(base_dir)
 
@@ -428,6 +460,10 @@ def main():
         print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
     else:
         print("ROI enlargement: disabled")
+    if max_background is not None:
+        print(f"Maximum background constraint: {max_background}")
+    else:
+        print("Maximum background constraint: disabled")
     print()
 
     # Process each subdirectory
@@ -440,6 +476,8 @@ def main():
         print(f"Background multiplication factor: {bg_multiplication_factor}")
         if roi_enlargement_pixels > 0:
             print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
+        if max_background is not None:
+            print(f"Maximum background constraint: {max_background}")
         print("=" * 60)
 
         # Load intensity images
@@ -477,15 +515,17 @@ def main():
         # Analyze enrichment using ROIs
         results = analyze_particle_enrichment_from_rois(
             mask_rois, perimeter_rois, cap_intensity,
-            image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor
+            image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor,
+            max_background=max_background
         )
 
         # Print summary
         print(f"\n  Summary Statistics (Cap enrichment):")
+        cap_backgrounds = [p['cap_background'] for p in results['particles']]
         cap_bg_subtracted = [p['cap_mean_bg_subtracted'] for p in results['particles']]
-        if len(cap_bg_subtracted) > 0:
-            print(f"    Mean bg-subtracted: {np.mean(cap_bg_subtracted):.2f}")
-            print(f"    Median bg-subtracted: {np.median(cap_bg_subtracted):.2f}")
+        if len(cap_backgrounds) > 0:
+            print(f"    Mean background: {np.mean(cap_backgrounds):.2f}")
+            print(f"    Median background: {np.median(cap_backgrounds):.2f}")
             print(f"    Particles with enrichment (>0): {np.sum(np.array(cap_bg_subtracted) > 0)}/{len(cap_bg_subtracted)}")
 
         # Save results
