@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-P-body Cap Enrichment Analysis
-Analyzes Cap enrichment in P-bodies using per-particle background subtraction.
+Microscopy Intensity Enrichment Analysis
+Analyzes intensity enrichment in particles using per-particle background subtraction.
 """
 
 import numpy as np
@@ -237,16 +237,16 @@ def find_gaussian_peaks(data, n_bins=50, max_background=None):
     }
 
 
-def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensity,
+def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, intensity_image,
                                           image_shape, method='gaussian_peaks',
                                           bg_multiplication_factor=1.0, max_background=None):
     """
-    Analyze Cap enrichment for each particle using ROI definitions.
+    Analyze intensity enrichment for each particle using ROI definitions.
 
     Args:
         mask_rois: List of ROI dictionaries for particles
         perimeter_rois: List of ROI dictionaries for perimeters
-        cap_intensity: Cap intensity image
+        intensity_image: Intensity image
         image_shape: Shape of the images
         method: 'minimum' or 'gaussian_peaks'
         bg_multiplication_factor: Multiplication factor for background value (default 1.0)
@@ -265,45 +265,45 @@ def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, cap_intensi
         perimeter_mask = roi_to_mask(perimeter_rois[i]['coordinates'], image_shape)
 
         # Extract intensities
-        cap_particle_intensities = cap_intensity[particle_mask > 0]
-        cap_perimeter_intensities = cap_intensity[perimeter_mask > 0]
+        image_particle_intensities = intensity_image[particle_mask > 0]
+        image_perimeter_intensities = intensity_image[perimeter_mask > 0]
 
         # Skip if no pixels found
-        if len(cap_particle_intensities) == 0 or len(cap_perimeter_intensities) == 0:
+        if len(image_particle_intensities) == 0 or len(image_perimeter_intensities) == 0:
             continue
 
         # Determine background value based on method
         if method == 'minimum':
-            cap_background_raw = np.min(cap_perimeter_intensities)
-            cap_peak_info = None
+            image_background_raw = np.min(image_perimeter_intensities)
+            image_peak_info = None
         elif method == 'gaussian_peaks':
-            cap_peak_info = find_gaussian_peaks(cap_perimeter_intensities, max_background=max_background)
-            cap_background_raw = cap_peak_info['background_value'] if cap_peak_info else np.mean(cap_perimeter_intensities)
+            image_peak_info = find_gaussian_peaks(image_perimeter_intensities, max_background=max_background)
+            image_background_raw = image_peak_info['background_value'] if image_peak_info else np.mean(image_perimeter_intensities)
         else:
             raise ValueError(f"Unknown method: {method}")
 
         # Apply multiplication factor to background value
-        cap_background = cap_background_raw * bg_multiplication_factor
+        image_background = image_background_raw * bg_multiplication_factor
 
         # Background-subtracted intensities
-        cap_bg_subtracted = cap_particle_intensities - cap_background
+        image_bg_subtracted = image_particle_intensities - image_background
 
         # Calculate statistics
         particle_result = {
             'particle_id': i + 1,  # 1-indexed particle ID
             'roi_name': mask_rois[i]['name'],
-            'n_pixels': len(cap_particle_intensities),
-            'n_perimeter_pixels': len(cap_perimeter_intensities),
+            'n_pixels': len(image_particle_intensities),
+            'n_perimeter_pixels': len(image_perimeter_intensities),
 
-            # Cap statistics
-            'cap_mean_raw': np.mean(cap_particle_intensities),
-            'cap_median_raw': np.median(cap_particle_intensities),
-            'cap_background': cap_background,
-            'cap_mean_bg_subtracted': np.mean(cap_bg_subtracted),
-            'cap_median_bg_subtracted': np.median(cap_bg_subtracted),
-            'cap_perimeter_mean': np.mean(cap_perimeter_intensities),
-            'cap_perimeter_std': np.std(cap_perimeter_intensities),
-            'cap_peak_info': cap_peak_info,
+            # Image statistics
+            'image_mean_raw': np.mean(image_particle_intensities),
+            'image_median_raw': np.median(image_particle_intensities),
+            'image_background': image_background,
+            'image_mean_bg_subtracted': np.mean(image_bg_subtracted),
+            'image_median_bg_subtracted': np.median(image_bg_subtracted),
+            'image_perimeter_mean': np.mean(image_perimeter_intensities),
+            'image_perimeter_std': np.std(image_perimeter_intensities),
+            'image_peak_info': image_peak_info,
         }
 
         results.append(particle_result)
@@ -340,7 +340,7 @@ def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_
         ax = axes[row, col]
 
         particle = particles[idx]
-        peak_info = particle['cap_peak_info']
+        peak_info = particle['image_peak_info']
 
         if peak_info is None:
             ax.text(0.5, 0.5, f"Particle {particle['particle_id']}\nNo data",
@@ -369,7 +369,7 @@ def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_
 
         ax.set_title(f"Particle {particle['particle_id']}\n"
                     f"{peak_info['n_peaks']} peak(s), {particle['n_perimeter_pixels']} px")
-        ax.set_xlabel('Cap Intensity')
+        ax.set_xlabel('Image Intensity')
         ax.set_ylabel('Count')
         ax.legend(fontsize=8)
 
@@ -423,7 +423,7 @@ def main():
     import argparse
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='P-body Cap Enrichment Analysis')
+    parser = argparse.ArgumentParser(description='Microscopy Intensity Enrichment Analysis')
     parser.add_argument('base_dir', nargs='?', default="/Volumes/NX-01-A/2025-10-08_test_data",
                        help='Base directory containing subdirectories with microscopy data')
     parser.add_argument('--bg-factor', type=float, default=1.0,
@@ -480,15 +480,15 @@ def main():
         print("=" * 60)
 
         # Load intensity images
-        cap_files = [f for f in data_dir.glob("*.tif") if "cap" in f.name.lower() and "intensity" in f.name.lower()]
+        intensity_files = [f for f in data_dir.glob("*.tif") if "intensity" in f.name.lower()]
 
-        if len(cap_files) == 0:
-            print(f"  Skipping {dataset_name}: Missing Cap intensity image")
+        if len(intensity_files) == 0:
+            print(f"  Skipping {dataset_name}: Missing intensity image")
             print()
             continue
 
-        cap_intensity = load_image(str(cap_files[0]))
-        image_shape = cap_intensity.shape
+        intensity_image = load_image(str(intensity_files[0]))
+        image_shape = intensity_image.shape
 
         # Load ROI files
         mask_roi_files = [f for f in data_dir.glob("*.zip") if "mask" in f.name.lower() and "dilated" not in f.name.lower()]
@@ -513,19 +513,19 @@ def main():
 
         # Analyze enrichment using ROIs
         results = analyze_particle_enrichment_from_rois(
-            mask_rois, perimeter_rois, cap_intensity,
+            mask_rois, perimeter_rois, intensity_image,
             image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor,
             max_background=max_background
         )
 
         # Print summary
-        print(f"\n  Summary Statistics (Cap enrichment):")
-        cap_backgrounds = [p['cap_background'] for p in results['particles']]
-        cap_bg_subtracted = [p['cap_mean_bg_subtracted'] for p in results['particles']]
-        if len(cap_backgrounds) > 0:
-            print(f"    Mean background: {np.mean(cap_backgrounds):.2f}")
-            print(f"    Median background: {np.median(cap_backgrounds):.2f}")
-            print(f"    Particles with enrichment (>0): {np.sum(np.array(cap_bg_subtracted) > 0)}/{len(cap_bg_subtracted)}")
+        print(f"\n  Summary Statistics (Image enrichment):")
+        image_backgrounds = [p['image_background'] for p in results['particles']]
+        image_bg_subtracted = [p['image_mean_bg_subtracted'] for p in results['particles']]
+        if len(image_backgrounds) > 0:
+            print(f"    Mean background: {np.mean(image_backgrounds):.2f}")
+            print(f"    Median background: {np.median(image_backgrounds):.2f}")
+            print(f"    Particles with enrichment (>0): {np.sum(np.array(image_bg_subtracted) > 0)}/{len(image_bg_subtracted)}")
 
         # Save results
         save_summary_statistics(results, data_dir, dataset_name)
