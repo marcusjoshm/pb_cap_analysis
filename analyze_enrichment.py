@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Microscopy Intensity Enrichment Analysis
-Analyzes intensity enrichment in particles using per-particle background subtraction.
+Microscopy Intensity Analysis
+Analyzes intensity measurements in ROIs using per-ROI local background subtraction.
 """
 
 import numpy as np
@@ -237,91 +237,91 @@ def find_gaussian_peaks(data, n_bins=50, max_background=None):
     }
 
 
-def analyze_particle_enrichment_from_rois(mask_rois, perimeter_rois, intensity_image,
-                                          image_shape, method='gaussian_peaks',
-                                          bg_multiplication_factor=1.0, max_background=None):
+def analyze_roi_intensity_from_rois(mask_rois, perimeter_rois, intensity_image,
+                                    image_shape, method='gaussian_peaks',
+                                    bg_multiplication_factor=1.0, max_background=None):
     """
-    Analyze intensity enrichment for each particle using ROI definitions.
+    Analyze intensity measurements for each ROI using local background subtraction.
 
     Args:
-        mask_rois: List of ROI dictionaries for particles
-        perimeter_rois: List of ROI dictionaries for perimeters
+        mask_rois: List of ROI dictionaries for regions of interest
+        perimeter_rois: List of ROI dictionaries for local background regions
         intensity_image: Intensity image
         image_shape: Shape of the images
         method: 'minimum' or 'gaussian_peaks'
         bg_multiplication_factor: Multiplication factor for background value (default 1.0)
 
     Returns:
-        Dictionary with per-particle analysis results
+        Dictionary with per-ROI analysis results
     """
-    n_particles = len(mask_rois)
-    print(f"  Found {n_particles} particles from ROI files")
+    n_rois = len(mask_rois)
+    print(f"  Found {n_rois} ROIs from ROI files")
 
     results = []
 
-    for i in range(n_particles):
+    for i in range(n_rois):
         # Create masks from ROIs
-        particle_mask = roi_to_mask(mask_rois[i]['coordinates'], image_shape)
-        perimeter_mask = roi_to_mask(perimeter_rois[i]['coordinates'], image_shape)
+        roi_mask = roi_to_mask(mask_rois[i]['coordinates'], image_shape)
+        background_mask = roi_to_mask(perimeter_rois[i]['coordinates'], image_shape)
 
         # Extract intensities
-        image_particle_intensities = intensity_image[particle_mask > 0]
-        image_perimeter_intensities = intensity_image[perimeter_mask > 0]
+        roi_intensities = intensity_image[roi_mask > 0]
+        background_intensities = intensity_image[background_mask > 0]
 
         # Skip if no pixels found
-        if len(image_particle_intensities) == 0 or len(image_perimeter_intensities) == 0:
+        if len(roi_intensities) == 0 or len(background_intensities) == 0:
             continue
 
         # Determine background value based on method
         if method == 'minimum':
-            image_background_raw = np.min(image_perimeter_intensities)
-            image_peak_info = None
+            background_raw = np.min(background_intensities)
+            peak_info = None
         elif method == 'gaussian_peaks':
-            image_peak_info = find_gaussian_peaks(image_perimeter_intensities, max_background=max_background)
-            image_background_raw = image_peak_info['background_value'] if image_peak_info else np.mean(image_perimeter_intensities)
+            peak_info = find_gaussian_peaks(background_intensities, max_background=max_background)
+            background_raw = peak_info['background_value'] if peak_info else np.mean(background_intensities)
         else:
             raise ValueError(f"Unknown method: {method}")
 
         # Apply multiplication factor to background value
-        image_background = image_background_raw * bg_multiplication_factor
+        background = background_raw * bg_multiplication_factor
 
         # Background-subtracted intensities
-        image_bg_subtracted = image_particle_intensities - image_background
+        bg_subtracted = roi_intensities - background
 
         # Calculate statistics
-        particle_result = {
-            'particle_id': i + 1,  # 1-indexed particle ID
+        roi_result = {
+            'roi_id': i + 1,  # 1-indexed ROI ID
             'roi_name': mask_rois[i]['name'],
-            'n_pixels': len(image_particle_intensities),
-            'n_perimeter_pixels': len(image_perimeter_intensities),
+            'n_pixels': len(roi_intensities),
+            'n_background_pixels': len(background_intensities),
 
-            # Image statistics
-            'image_mean_raw': np.mean(image_particle_intensities),
-            'image_median_raw': np.median(image_particle_intensities),
-            'image_background': image_background,
-            'image_mean_bg_subtracted': np.mean(image_bg_subtracted),
-            'image_median_bg_subtracted': np.median(image_bg_subtracted),
-            'image_perimeter_mean': np.mean(image_perimeter_intensities),
-            'image_perimeter_std': np.std(image_perimeter_intensities),
-            'image_peak_info': image_peak_info,
+            # Intensity statistics
+            'mean_raw': np.mean(roi_intensities),
+            'median_raw': np.median(roi_intensities),
+            'background': background,
+            'mean_bg_subtracted': np.mean(bg_subtracted),
+            'median_bg_subtracted': np.median(bg_subtracted),
+            'background_mean': np.mean(background_intensities),
+            'background_std': np.std(background_intensities),
+            'peak_info': peak_info,
         }
 
-        results.append(particle_result)
+        results.append(roi_result)
 
     return {
-        'particles': results,
-        'n_particles': n_particles,
+        'rois': results,
+        'n_rois': n_rois,
         'method': method
     }
 
 
-def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_plots=9):
+def visualize_roi_histograms(analysis_results, data_dir, dataset_name, max_plots=9):
     """
-    Create histogram visualizations for the first few particles showing
-    perimeter intensity distributions and detected peaks.
+    Create histogram visualizations for the first few ROIs showing
+    background intensity distributions and detected peaks.
     """
-    particles = analysis_results['particles']
-    n_to_plot = min(max_plots, len(particles))
+    rois = analysis_results['rois']
+    n_to_plot = min(max_plots, len(rois))
 
     if n_to_plot == 0:
         return
@@ -339,11 +339,11 @@ def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_
         col = idx % n_cols
         ax = axes[row, col]
 
-        particle = particles[idx]
-        peak_info = particle['image_peak_info']
+        roi = rois[idx]
+        peak_info = roi['peak_info']
 
         if peak_info is None:
-            ax.text(0.5, 0.5, f"Particle {particle['particle_id']}\nNo data",
+            ax.text(0.5, 0.5, f"ROI {roi['roi_id']}\nNo data",
                    ha='center', va='center')
             ax.axis('off')
             continue
@@ -367,9 +367,9 @@ def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_
         ax.axvline(peak_info['background_value'], color='blue',
                   linestyle='-', linewidth=2, label=f"BG={peak_info['background_value']:.1f}")
 
-        ax.set_title(f"Particle {particle['particle_id']}\n"
-                    f"{peak_info['n_peaks']} peak(s), {particle['n_perimeter_pixels']} px")
-        ax.set_xlabel('Image Intensity')
+        ax.set_title(f"ROI {roi['roi_id']}\n"
+                    f"{peak_info['n_peaks']} peak(s), {roi['n_background_pixels']} px")
+        ax.set_xlabel('Intensity')
         ax.set_ylabel('Count')
         ax.legend(fontsize=8)
 
@@ -380,7 +380,7 @@ def visualize_particle_histograms(analysis_results, data_dir, dataset_name, max_
         axes[row, col].axis('off')
 
     plt.tight_layout()
-    output_path = Path(data_dir) / f"{dataset_name}_perimeter_histograms.png"
+    output_path = Path(data_dir) / f"{dataset_name}_background_histograms.png"
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
     print(f"  Saved: {output_path.name}")
@@ -390,23 +390,23 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
     """Save summary statistics to a CSV file."""
     import csv
 
-    particles = analysis_results['particles']
-    output_path = Path(data_dir) / f"{dataset_name}_enrichment_analysis.csv"
+    rois = analysis_results['rois']
+    output_path = Path(data_dir) / f"{dataset_name}_intensity_analysis.csv"
 
     with open(output_path, 'w', newline='') as f:
-        if len(particles) == 0:
+        if len(rois) == 0:
             return
 
-        # Get fieldnames from first particle (exclude peak_info objects)
-        fieldnames = [k for k in particles[0].keys() if 'peak_info' not in k]
+        # Get fieldnames from first ROI (exclude peak_info objects)
+        fieldnames = [k for k in rois[0].keys() if 'peak_info' not in k]
 
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
-        for particle in particles:
+        for roi in rois:
             # Filter out peak_info and convert negative values to empty strings
             row = {}
-            for k, v in particle.items():
+            for k, v in roi.items():
                 if 'peak_info' not in k:
                     # If the value is numeric and negative, use empty string
                     if isinstance(v, (int, float, np.integer, np.floating)) and v < 0:
@@ -423,7 +423,7 @@ def main():
     import argparse
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Microscopy Intensity Enrichment Analysis')
+    parser = argparse.ArgumentParser(description='Microscopy Intensity Analysis')
     parser.add_argument('base_dir', nargs='?', default="/Volumes/NX-01-A/2025-10-08_test_data",
                        help='Base directory containing subdirectories with microscopy data')
     parser.add_argument('--bg-factor', type=float, default=1.0,
@@ -505,31 +505,31 @@ def main():
         mask_rois = load_imagej_rois(str(mask_roi_files[0]))
         dilated_rois = load_imagej_rois(str(dilated_roi_files[0]))
 
-        # Optionally further enlarge the dilated ROIs using ImageJ's RoiEnlarger
+        # Optionally further enlarge the dilated ROIs
         if roi_enlargement_pixels > 0:
-            perimeter_rois = enlarge_rois_with_imagej(dilated_rois, pixels=roi_enlargement_pixels)
+            background_rois = enlarge_rois_with_imagej(dilated_rois, pixels=roi_enlargement_pixels)
         else:
-            perimeter_rois = dilated_rois
+            background_rois = dilated_rois
 
-        # Analyze enrichment using ROIs
-        results = analyze_particle_enrichment_from_rois(
-            mask_rois, perimeter_rois, intensity_image,
+        # Analyze intensity using ROIs
+        results = analyze_roi_intensity_from_rois(
+            mask_rois, background_rois, intensity_image,
             image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor,
             max_background=max_background
         )
 
         # Print summary
-        print(f"\n  Summary Statistics (Image enrichment):")
-        image_backgrounds = [p['image_background'] for p in results['particles']]
-        image_bg_subtracted = [p['image_mean_bg_subtracted'] for p in results['particles']]
-        if len(image_backgrounds) > 0:
-            print(f"    Mean background: {np.mean(image_backgrounds):.2f}")
-            print(f"    Median background: {np.median(image_backgrounds):.2f}")
-            print(f"    Particles with enrichment (>0): {np.sum(np.array(image_bg_subtracted) > 0)}/{len(image_bg_subtracted)}")
+        print("\n  Summary Statistics (Intensity measurements):")
+        backgrounds = [r['background'] for r in results['rois']]
+        bg_subtracted = [r['mean_bg_subtracted'] for r in results['rois']]
+        if len(backgrounds) > 0:
+            print(f"    Mean background: {np.mean(backgrounds):.2f}")
+            print(f"    Median background: {np.median(backgrounds):.2f}")
+            print(f"    ROIs with positive signal (>0): {np.sum(np.array(bg_subtracted) > 0)}/{len(bg_subtracted)}")
 
         # Save results
         save_summary_statistics(results, data_dir, dataset_name)
-        visualize_particle_histograms(results, data_dir, dataset_name)
+        visualize_roi_histograms(results, data_dir, dataset_name)
 
         print()
 
