@@ -1,20 +1,21 @@
-# P-Body Cap Enrichment Analysis
+# Microscopy Intensity Enrichment Analysis
 
-Python analysis pipeline for analyzing microscopy data to assess Cap enrichment in P-bodies (processing bodies).
+Universal Python analysis pipeline for analyzing microscopy data to assess intensity enrichment in particles using per-particle background subtraction.
 
 ## Overview
 
-This pipeline analyzes microscopy images to determine if P-bodies are enriched with Cap signal compared to background. It uses per-particle background subtraction based on perimeter intensity analysis with Gaussian peak detection.
+This pipeline analyzes microscopy images to determine if particles are enriched with signal compared to background. It uses per-particle background subtraction based on perimeter intensity analysis with Gaussian peak detection. Originally developed for P-body Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity data.
 
 ## Features
 
-- **Data Extraction**: Extracts Cap and G3BP1 intensity values from mask regions and perimeters
+- **Universal Intensity Analysis**: Works with any intensity image - no longer limited to specific markers (Cap, G3BP1, etc.)
 - **Background Subtraction**: Two methods available:
   - `minimum`: Uses minimum perimeter intensity
-  - `gaussian_peaks`: Detects Gaussian peaks in perimeter histograms to identify true background (handles particles near Cap-enriched structures)
-- **Per-Particle Analysis**: Each P-body is analyzed individually with its own perimeter-based background
+  - `gaussian_peaks`: Detects Gaussian peaks in perimeter histograms to identify true background (handles particles near enriched structures)
+- **Per-Particle Analysis**: Each particle is analyzed individually with its own perimeter-based background
 - **ROI Support**: Uses ImageJ ROI zip files for precise particle definitions
 - **Visualization**: Generates intensity maps and perimeter histograms
+- **Flexible File Naming**: Automatically detects any `.tif` file with "intensity" in the filename
 
 ## Setup
 
@@ -135,32 +136,46 @@ This script:
 Expected directory structure:
 ```
 /path/to/data/
-├── Untreated/
-│   ├── *Mask*.tif                  # P-body mask
-│   ├── *Dilated*Mask*.tif          # Dilated mask (for perimeter)
-│   ├── *Cap*Intensity*.tif         # Cap intensity image
-│   ├── *G3BP1*Intensity*.tif       # G3BP1 intensity image
+├── Condition1/
+│   ├── *Mask*.tif                  # Particle mask
+│   ├── *Dilated*Mask*.tif          # Dilated mask (for perimeter, optional)
+│   ├── *Intensity*.tif             # ANY intensity image (e.g., Cap, GFP, mCherry, etc.)
 │   ├── *Mask*.zip                  # ImageJ ROIs for particles
-│   └── *Perimeter*.zip             # ImageJ ROIs for perimeters
-└── As Treated/
+│   └── *Dilated*.zip               # ImageJ ROIs for perimeters (dilated regions)
+└── Condition2/
     └── (same structure)
 ```
+
+**Key Requirements:**
+- Intensity images must contain "intensity" in the filename (case-insensitive)
+- The script now accepts **any** `.tif` file with "intensity" in the name
+- No specific marker name (like "Cap" or "G3BP1") is required in the filename
+- Examples of valid intensity filenames:
+  - `sample_intensity.tif`
+  - `GFP_Intensity.tif`
+  - `Cap_intensity_channel1.tif`
+  - `intensity_map.tif`
 
 ## Output Files
 
 ### Data Extraction
-- `{dataset}_Cap_Full.png` - Full Cap intensity visualization
-- `{dataset}_Cap_Perimeter.png` - Cap intensity at perimeter only
-- `{dataset}_G3BP1_Full.png` - Full G3BP1 intensity visualization
-- `{dataset}_G3BP1_Perimeter.png` - G3BP1 intensity at perimeter only
+- `{dataset}_Cap_Full.png` - Full Cap intensity visualization (if using Cap data)
+- `{dataset}_Cap_Perimeter.png` - Cap intensity at perimeter only (if using Cap data)
+- `{dataset}_G3BP1_Full.png` - Full G3BP1 intensity visualization (if using G3BP1 data)
+- `{dataset}_G3BP1_Perimeter.png` - G3BP1 intensity at perimeter only (if using G3BP1 data)
 - `*Perimeter Mask.tif` - Binary perimeter masks (8-bit)
 
 ### Enrichment Analysis
 - `{dataset}_enrichment_analysis.csv` - Per-particle statistics including:
   - Particle ID and ROI name
-  - Raw and background-subtracted intensities
+  - Raw and background-subtracted intensities (columns now prefixed with `image_` instead of `cap_`)
   - Background values
   - Perimeter statistics
+  - **CSV Column Names** (updated to be marker-agnostic):
+    - `image_mean_raw`, `image_median_raw`
+    - `image_background`
+    - `image_mean_bg_subtracted`, `image_median_bg_subtracted`
+    - `image_perimeter_mean`, `image_perimeter_std`
   - **Note**: Negative values (from background subtraction) are replaced with empty cells in the CSV
 - `{dataset}_perimeter_histograms.png` - Histogram visualizations showing detected peaks
 
@@ -170,15 +185,15 @@ Expected directory structure:
 
 1. **Gaussian Peak Detection** (default):
    - Analyzes perimeter intensity histogram with range starting at 0 to capture near-zero peaks
-   - Uses lower prominence threshold (0.05) to detect subtle peaks
-   - Detects Gaussian peaks in smoothed histogram
+   - Uses 15% of maximum histogram count as minimum prominence threshold to detect significant peaks
+   - Detects peaks in smoothed histogram (Gaussian filter with sigma=2)
    - **Default mode** (no `--max-background`): Uses the leftmost (lowest intensity) detected peak as background
    - **Constrained mode** (with `--max-background`): Only considers peaks below the specified threshold
      - Selects the most prominent peak below the threshold
      - If no peaks detected, uses the histogram bin with highest frequency below the threshold
      - Ensures background values stay within expected range
    - Multiple peaks → assumes higher peak is from nearby enriched structure
-   - Fallback: If no peaks detected at all, uses the maximum of the histogram as background
+   - Fallback: If no peaks detected at all, uses the bin with maximum count as background
 
 2. **Minimum Value**:
    - Uses minimum perimeter intensity as background
