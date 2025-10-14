@@ -1,20 +1,20 @@
-# Microscopy Intensity Enrichment Analysis
+# Microscopy Intensity Analysis
 
-Universal Python analysis pipeline for analyzing microscopy data to assess intensity enrichment in particles using per-particle background subtraction.
+Universal Python analysis pipeline for analyzing microscopy intensity data using per-ROI local background subtraction.
 
 ## Overview
 
-This pipeline analyzes microscopy images to determine if particles are enriched with signal compared to background. It uses per-particle background subtraction based on perimeter intensity analysis with Gaussian peak detection. Originally developed for P-body Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity data.
+This pipeline analyzes microscopy images to measure intensity in regions of interest (ROIs) with local background subtraction. It uses per-ROI background subtraction based on dilated region intensity analysis with Gaussian peak detection. Originally developed for P-body Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity measurement.
 
 ## Features
 
 - **Universal Intensity Analysis**: Works with any intensity image - no longer limited to specific markers (Cap, G3BP1, etc.)
 - **Background Subtraction**: Two methods available:
-  - `minimum`: Uses minimum perimeter intensity
-  - `gaussian_peaks`: Detects Gaussian peaks in perimeter histograms to identify true background (handles particles near enriched structures)
-- **Per-Particle Analysis**: Each particle is analyzed individually with its own perimeter-based background
-- **ROI Support**: Uses ImageJ ROI zip files for precise particle definitions
-- **Visualization**: Generates intensity maps and perimeter histograms
+  - `minimum`: Uses minimum background region intensity
+  - `gaussian_peaks`: Detects Gaussian peaks in background region histograms to identify true background (handles ROIs near high-intensity structures)
+- **Per-ROI Analysis**: Each ROI is analyzed individually with its own local background region
+- **ROI Support**: Uses ImageJ ROI zip files for precise region definitions
+- **Visualization**: Generates intensity maps and background region histograms
 - **Flexible File Naming**: Automatically detects any `.tif` file with "intensity" in the filename
 
 ## Setup
@@ -64,9 +64,9 @@ This script:
 - Generates visualization plots with viridis colormap
 - Saves perimeter masks as 8-bit TIFF files (values: 0 and 255)
 
-### 2. Analyze Enrichment
+### 2. Analyze Intensity
 
-Perform per-particle background subtraction and enrichment analysis:
+Perform per-ROI background subtraction and intensity analysis:
 
 ```bash
 python analyze_enrichment.py /path/to/your/data
@@ -118,17 +118,17 @@ python analyze_enrichment.py /path/to/your/data
   - Useful for datasets where you know the true background should be low (e.g., < 100)
   - When not set (default), uses the leftmost (lowest intensity) detected peak
 
-- **`--enlarge-rois`**: Expands the perimeter ROIs by the specified number of pixels using binary dilation. This increases the region used for background estimation, which can be helpful when the default perimeter is too narrow.
+- **`--enlarge-rois`**: Expands the background ROIs by the specified number of pixels using binary dilation. This increases the region used for background estimation, which can be helpful when the default background region is too narrow.
 
 This script:
 
 - Automatically scans all subdirectories in the base directory
-- Loads ImageJ ROI files for particles and perimeters
-- Analyzes each particle individually
-- Detects Gaussian peaks in perimeter intensity histograms
+- Loads ImageJ ROI files for regions and background regions
+- Analyzes each ROI individually
+- Detects Gaussian peaks in background region intensity histograms
 - Performs background subtraction using appropriate peak values
 - Exports CSV files with detailed statistics
-- Creates histogram visualizations for each particle
+- Creates histogram visualizations for each ROI
 - Skips subdirectories missing required files with informative messages
 
 ## Input Data Structure
@@ -137,18 +137,18 @@ Expected directory structure:
 ```
 /path/to/data/
 ├── Condition1/
-│   ├── *Mask*.tif                  # Particle mask
-│   ├── *Dilated*Mask*.tif          # Dilated mask (for perimeter, optional)
+│   ├── *Mask*.tif                  # ROI mask
+│   ├── *Dilated*Mask*.tif          # Dilated mask (for background region, optional)
 │   ├── *Intensity*.tif             # ANY intensity image (e.g., Cap, GFP, mCherry, etc.)
-│   ├── *Mask*.zip                  # ImageJ ROIs for particles
-│   └── *Dilated*.zip               # ImageJ ROIs for perimeters (dilated regions)
+│   ├── *Mask*.zip                  # ImageJ ROIs for regions of interest
+│   └── *Dilated*.zip               # ImageJ ROIs for background regions (dilated regions)
 └── Condition2/
     └── (same structure)
 ```
 
 **Key Requirements:**
 - Intensity images must contain "intensity" in the filename (case-insensitive)
-- The script now accepts **any** `.tif` file with "intensity" in the name
+- The script accepts **any** `.tif` file with "intensity" in the name
 - No specific marker name (like "Cap" or "G3BP1") is required in the filename
 - Examples of valid intensity filenames:
   - `sample_intensity.tif`
@@ -165,26 +165,28 @@ Expected directory structure:
 - `{dataset}_G3BP1_Perimeter.png` - G3BP1 intensity at perimeter only (if using G3BP1 data)
 - `*Perimeter Mask.tif` - Binary perimeter masks (8-bit)
 
-### Enrichment Analysis
-- `{dataset}_enrichment_analysis.csv` - Per-particle statistics including:
-  - Particle ID and ROI name
-  - Raw and background-subtracted intensities (columns now prefixed with `image_` instead of `cap_`)
+### Intensity Analysis
+- `{dataset}_intensity_analysis.csv` - Per-ROI statistics including:
+  - ROI ID and ROI name
+  - Raw and background-subtracted intensities
   - Background values
-  - Perimeter statistics
-  - **CSV Column Names** (updated to be marker-agnostic):
-    - `image_mean_raw`, `image_median_raw`
-    - `image_background`
-    - `image_mean_bg_subtracted`, `image_median_bg_subtracted`
-    - `image_perimeter_mean`, `image_perimeter_std`
+  - Background region statistics
+  - **CSV Column Names**:
+    - `roi_id`, `roi_name`
+    - `mean_raw`, `median_raw`
+    - `background`
+    - `mean_bg_subtracted`, `median_bg_subtracted`
+    - `background_mean`, `background_std`
+    - `n_pixels`, `n_background_pixels`
   - **Note**: Negative values (from background subtraction) are replaced with empty cells in the CSV
-- `{dataset}_perimeter_histograms.png` - Histogram visualizations showing detected peaks
+- `{dataset}_background_histograms.png` - Histogram visualizations showing detected peaks
 
 ## Methods
 
 ### Background Subtraction Approaches
 
 1. **Gaussian Peak Detection** (default):
-   - Analyzes perimeter intensity histogram with range starting at 0 to capture near-zero peaks
+   - Analyzes background region intensity histogram with range starting at 0 to capture near-zero peaks
    - Uses 15% of maximum histogram count as minimum prominence threshold to detect significant peaks
    - Detects peaks in smoothed histogram (Gaussian filter with sigma=2)
    - **Default mode** (no `--max-background`): Uses the leftmost (lowest intensity) detected peak as background
@@ -192,27 +194,27 @@ Expected directory structure:
      - Selects the most prominent peak below the threshold
      - If no peaks detected, uses the histogram bin with highest frequency below the threshold
      - Ensures background values stay within expected range
-   - Multiple peaks → assumes higher peak is from nearby enriched structure
+   - Multiple peaks → assumes higher peak is from nearby high-intensity structure
    - Fallback: If no peaks detected at all, uses the bin with maximum count as background
 
 2. **Minimum Value**:
-   - Uses minimum perimeter intensity as background
-   - Simpler but may overestimate enrichment if minimum is anomalously low
+   - Uses minimum background region intensity as background
+   - Simpler but may overestimate signal if minimum is anomalously low
 
 ### ROI Enlargement
 
-The `--enlarge-rois` parameter allows expanding perimeter ROIs for background estimation:
+The `--enlarge-rois` parameter allows expanding background ROIs for background estimation:
 - Uses binary dilation with 4-connected structuring element (equivalent to ImageJ's RoiEnlarger)
-- Expands the perimeter region by the specified number of pixels
-- Useful when the default dilated mask doesn't provide enough perimeter pixels for reliable background estimation
-- Example: `--enlarge-rois 5` expands each perimeter ROI by 5 pixels in all directions
+- Expands the background region by the specified number of pixels
+- Useful when the default dilated mask doesn't provide enough background pixels for reliable background estimation
+- Example: `--enlarge-rois 5` expands each background ROI by 5 pixels in all directions
 
 ### Background Multiplication Factor
 
 The `--bg-factor` parameter allows fine-tuning of background subtraction:
-- **Values < 1.0** (e.g., 0.8): More conservative - reduces the background value before subtraction, resulting in lower enrichment scores
+- **Values < 1.0** (e.g., 0.8): More conservative - reduces the background value before subtraction, resulting in lower background-subtracted values
 - **Values = 1.0**: Default - uses the detected background value as-is
-- **Values > 1.0** (e.g., 1.2): More aggressive - increases the background value before subtraction, resulting in higher enrichment scores
+- **Values > 1.0** (e.g., 1.2): More aggressive - increases the background value before subtraction, resulting in higher background-subtracted values
 
 This is useful when you want to adjust for systematic over- or under-estimation of background.
 
@@ -228,10 +230,10 @@ The `--max-background` parameter constrains background peak selection:
 
 ### Negative Value Handling
 
-After background subtraction, some particles may have negative enrichment values (particle intensity < background). In the output CSV:
+After background subtraction, some ROIs may have negative values (ROI intensity < background). In the output CSV:
 - **Negative values are replaced with empty cells**
-- This prevents misleading negative enrichment scores
-- Empty cells make it easy to identify particles where signal is below background
+- This prevents misleading negative values
+- Empty cells make it easy to identify ROIs where signal is below background
 - All other numeric and non-numeric values are preserved as-is
 
 ## Dependencies
