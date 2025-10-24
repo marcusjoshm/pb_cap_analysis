@@ -418,6 +418,165 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
     print(f"  Saved: {output_path.name}")
 
 
+def find_file_matching_keywords(files, keywords, exclude_keywords=None):
+    """
+    Find a file that contains all specified keywords in its name (case-insensitive).
+
+    Args:
+        files: List of Path objects
+        keywords: List of keywords that must all be present in the filename
+        exclude_keywords: List of keywords that must NOT be present in the filename
+
+    Returns:
+        First matching file or None if no match found
+    """
+    keywords_lower = [k.lower() for k in keywords]
+    exclude_lower = [k.lower() for k in exclude_keywords] if exclude_keywords else []
+
+    for f in files:
+        filename_lower = f.name.lower()
+        # Check if all required keywords are present
+        if all(kw in filename_lower for kw in keywords_lower):
+            # Check if any excluded keywords are present
+            if any(kw in filename_lower for kw in exclude_lower):
+                continue
+            return f
+    return None
+
+
+def get_analysis_configurations():
+    """
+    Define analysis configurations specifying which intensity images to analyze
+    with which ROI masks and what to name the output files.
+
+    Returns:
+        List of configuration dictionaries
+    """
+    return [
+        {
+            'name': 'PB_Cap',
+            'intensity_keywords': ['Cap', 'Intensity'],
+            'mask_keywords': ['PB', 'Mask'],
+            'mask_exclude_keywords': ['Dilated'],  # Exclude dilated masks
+            'dilated_keywords': ['PB', 'Dilated', 'Mask'],
+            'output_name': 'PB_Cap',
+            'bg_factor': None,  # To be filled by user input
+            'enlarge_rois': None,  # To be filled by user input
+            'max_background': None  # To be filled by user input
+        },
+        {
+            'name': 'DDX6',
+            'intensity_keywords': ['DDX6', 'Intensity'],
+            'mask_keywords': ['PB', 'Mask'],
+            'mask_exclude_keywords': ['Dilated'],  # Exclude dilated masks
+            'dilated_keywords': ['PB', 'Dilated', 'Mask'],
+            'output_name': 'DDX6',
+            'bg_factor': None,
+            'enlarge_rois': None,
+            'max_background': None
+        },
+        {
+            'name': 'SG_Cap',
+            'intensity_keywords': ['Cap', 'Intensity'],
+            'mask_keywords': ['SG', 'Mask'],
+            'mask_exclude_keywords': ['Dilated'],  # Exclude dilated masks
+            'dilated_keywords': ['SG', 'Dilated', 'Mask'],
+            'output_name': 'SG_Cap',
+            'bg_factor': None,
+            'enlarge_rois': None,
+            'max_background': None
+        },
+        {
+            'name': 'G3BP1',
+            'intensity_keywords': ['G3BP1', 'Intensity'],
+            'mask_keywords': ['SG', 'Mask'],
+            'mask_exclude_keywords': ['Dilated'],  # Exclude dilated masks
+            'dilated_keywords': ['SG', 'Dilated', 'Mask'],
+            'output_name': 'G3BP1',
+            'bg_factor': None,
+            'enlarge_rois': None,
+            'max_background': None
+        }
+    ]
+
+
+def prompt_for_config_parameters(configs):
+    """
+    Prompt user to enter parameters for each analysis configuration.
+
+    Args:
+        configs: List of configuration dictionaries
+
+    Returns:
+        Updated list of configuration dictionaries with user-provided parameters
+    """
+    print("\n" + "=" * 60)
+    print("CONFIGURATION PARAMETERS")
+    print("=" * 60)
+    print("Please enter parameters for each analysis configuration.")
+    print("Press Enter to use default values shown in brackets.\n")
+
+    for config in configs:
+        print(f"\n--- {config['name']} Configuration ---")
+
+        # Background factor
+        while True:
+            try:
+                bg_input = input("  Background multiplication factor [1.0]: ").strip()
+                if bg_input == "":
+                    config['bg_factor'] = 1.0
+                    break
+                bg_val = float(bg_input)
+                if bg_val < 0:
+                    print("    Error: Background factor must be non-negative. Please try again.")
+                    continue
+                config['bg_factor'] = bg_val
+                break
+            except ValueError:
+                print("    Error: Please enter a valid number.")
+
+        # ROI enlargement
+        while True:
+            try:
+                enlarge_input = input("  ROI enlargement pixels [0]: ").strip()
+                if enlarge_input == "":
+                    config['enlarge_rois'] = 0
+                    break
+                enlarge_val = int(enlarge_input)
+                config['enlarge_rois'] = enlarge_val
+                break
+            except ValueError:
+                print("    Error: Please enter a valid integer.")
+
+        # Max background
+        while True:
+            try:
+                max_bg_input = input("  Maximum background threshold [None]: ").strip()
+                if max_bg_input == "" or max_bg_input.lower() == "none":
+                    config['max_background'] = None
+                    break
+                max_bg_val = float(max_bg_input)
+                if max_bg_val < 0:
+                    print("    Error: Maximum background must be non-negative. Please try again.")
+                    continue
+                config['max_background'] = max_bg_val
+                break
+            except ValueError:
+                print("    Error: Please enter a valid number or 'None'.")
+
+    print("\n" + "=" * 60)
+    print("CONFIGURATION SUMMARY")
+    print("=" * 60)
+    for config in configs:
+        print(f"\n{config['name']}:")
+        print(f"  Background factor: {config['bg_factor']}")
+        print(f"  ROI enlargement: {config['enlarge_rois']} pixels")
+        print(f"  Max background: {config['max_background']}")
+    print("=" * 60 + "\n")
+
+    return configs
+
+
 def main():
     """Main analysis function."""
     import argparse
@@ -426,20 +585,10 @@ def main():
     parser = argparse.ArgumentParser(description='Microscopy Intensity Analysis')
     parser.add_argument('base_dir', nargs='?', default="/Volumes/NX-01-A/2025-10-08_test_data",
                        help='Base directory containing subdirectories with microscopy data')
-    parser.add_argument('--bg-factor', type=float, default=1.0,
-                       help='Background subtraction multiplication factor (default: 1.0)')
-    parser.add_argument('--enlarge-rois', type=int, default=0,
-                       help='Number of pixels to enlarge dilated ROIs (default: 0, no enlargement)')
-    parser.add_argument('--max-background', type=float, default=None,
-                       help='Maximum background value threshold. Only peaks below this value will be considered for background (default: None, no constraint)')
 
     args = parser.parse_args()
 
     base_dir = args.base_dir
-    bg_multiplication_factor = args.bg_factor
-    roi_enlargement_pixels = args.enlarge_rois
-    max_background = args.max_background
-
     base_path = Path(base_dir)
 
     if not base_path.exists():
@@ -454,16 +603,10 @@ def main():
         return
 
     print(f"Found {len(subdirs)} subdirectories to analyze")
-    print(f"Background multiplication factor: {bg_multiplication_factor}")
-    if roi_enlargement_pixels > 0:
-        print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
-    else:
-        print("ROI enlargement: disabled")
-    if max_background is not None:
-        print(f"Maximum background constraint: {max_background}")
-    else:
-        print("Maximum background constraint: disabled")
-    print()
+
+    # Get analysis configurations and prompt for parameters
+    analysis_configs = get_analysis_configurations()
+    analysis_configs = prompt_for_config_parameters(analysis_configs)
 
     # Process each subdirectory
     for data_dir in subdirs:
@@ -471,65 +614,84 @@ def main():
         method = "gaussian_peaks"  # Default method
 
         print("=" * 60)
-        print(f"Analyzing {dataset_name} Dataset - Method: {method}")
-        print(f"Background multiplication factor: {bg_multiplication_factor}")
-        if roi_enlargement_pixels > 0:
-            print(f"ROI enlargement: {roi_enlargement_pixels} pixels")
-        if max_background is not None:
-            print(f"Maximum background constraint: {max_background}")
+        print(f"Analyzing {dataset_name} Dataset")
         print("=" * 60)
 
-        # Load intensity images
-        intensity_files = [f for f in data_dir.glob("*.tif") if "intensity" in f.name.lower()]
+        # Get all available files in the directory
+        tif_files = list(data_dir.glob("*.tif"))
+        zip_files = list(data_dir.glob("*.zip"))
 
-        if len(intensity_files) == 0:
-            print(f"  Skipping {dataset_name}: Missing intensity image")
-            print()
-            continue
+        # Process each analysis configuration
+        for config in analysis_configs:
+            print(f"\n--- Processing {config['name']} analysis ---")
+            print(f"  Background multiplication factor: {config['bg_factor']}")
+            print(f"  ROI enlargement: {config['enlarge_rois']} pixels")
+            print(f"  Maximum background constraint: {config['max_background']}")
 
-        intensity_image = load_image(str(intensity_files[0]))
-        image_shape = intensity_image.shape
+            # Find matching files for this configuration
+            intensity_file = find_file_matching_keywords(tif_files, config['intensity_keywords'])
+            mask_file = find_file_matching_keywords(zip_files, config['mask_keywords'],
+                                                    exclude_keywords=config.get('mask_exclude_keywords'))
+            dilated_file = find_file_matching_keywords(zip_files, config['dilated_keywords'])
 
-        # Load ROI files
-        mask_roi_files = [f for f in data_dir.glob("*.zip") if "mask" in f.name.lower() and "dilated" not in f.name.lower()]
-        dilated_roi_files = [f for f in data_dir.glob("*.zip") if "dilated" in f.name.lower() and "mask" in f.name.lower()]
+            # Check if all required files were found
+            if intensity_file is None:
+                print(f"  Skipping {config['name']}: No intensity file found matching {config['intensity_keywords']}")
+                continue
 
-        if len(mask_roi_files) == 0 or len(dilated_roi_files) == 0:
-            print(f"  Skipping {dataset_name}: Missing ROI files")
-            print()
-            continue
+            if mask_file is None:
+                print(f"  Skipping {config['name']}: No mask file found matching {config['mask_keywords']}")
+                continue
 
-        print(f"  Loading ROIs from: {mask_roi_files[0].name}")
-        print(f"  Loading dilated ROIs from: {dilated_roi_files[0].name}")
+            if dilated_file is None:
+                print(f"  Skipping {config['name']}: No dilated mask file found matching {config['dilated_keywords']}")
+                continue
 
-        mask_rois = load_imagej_rois(str(mask_roi_files[0]))
-        dilated_rois = load_imagej_rois(str(dilated_roi_files[0]))
+            # Verify that mask and dilated files are different
+            if mask_file == dilated_file:
+                print(f"  Skipping {config['name']}: Mask and dilated mask files are the same")
+                continue
 
-        # Optionally further enlarge the dilated ROIs
-        if roi_enlargement_pixels > 0:
-            background_rois = enlarge_rois_with_imagej(dilated_rois, pixels=roi_enlargement_pixels)
-        else:
-            background_rois = dilated_rois
+            print(f"  Intensity image: {intensity_file.name}")
+            print(f"  Mask ROIs: {mask_file.name}")
+            print(f"  Dilated mask ROIs: {dilated_file.name}")
 
-        # Analyze intensity using ROIs
-        results = analyze_roi_intensity_from_rois(
-            mask_rois, background_rois, intensity_image,
-            image_shape, method=method, bg_multiplication_factor=bg_multiplication_factor,
-            max_background=max_background
-        )
+            # Load intensity image
+            intensity_image = load_image(str(intensity_file))
+            image_shape = intensity_image.shape
 
-        # Print summary
-        print("\n  Summary Statistics (Intensity measurements):")
-        backgrounds = [r['background'] for r in results['rois']]
-        bg_subtracted = [r['mean_bg_subtracted'] for r in results['rois']]
-        if len(backgrounds) > 0:
-            print(f"    Mean background: {np.mean(backgrounds):.2f}")
-            print(f"    Median background: {np.median(backgrounds):.2f}")
-            print(f"    ROIs with positive signal (>0): {np.sum(np.array(bg_subtracted) > 0)}/{len(bg_subtracted)}")
+            # Load ROI files
+            mask_rois = load_imagej_rois(str(mask_file))
+            dilated_rois = load_imagej_rois(str(dilated_file))
 
-        # Save results
-        save_summary_statistics(results, data_dir, dataset_name)
-        visualize_roi_histograms(results, data_dir, dataset_name)
+            # Optionally further enlarge the dilated ROIs using config-specific parameter
+            if config['enlarge_rois'] > 0:
+                background_rois = enlarge_rois_with_imagej(dilated_rois, pixels=config['enlarge_rois'])
+            else:
+                background_rois = dilated_rois
+
+            # Analyze intensity using ROIs with config-specific parameters
+            results = analyze_roi_intensity_from_rois(
+                mask_rois, background_rois, intensity_image,
+                image_shape, method=method, bg_multiplication_factor=config['bg_factor'],
+                max_background=config['max_background']
+            )
+
+            # Print summary
+            print("\n  Summary Statistics (Intensity measurements):")
+            backgrounds = [r['background'] for r in results['rois']]
+            bg_subtracted = [r['mean_bg_subtracted'] for r in results['rois']]
+            if len(backgrounds) > 0:
+                print(f"    Mean background: {np.mean(backgrounds):.2f}")
+                print(f"    Median background: {np.median(backgrounds):.2f}")
+                print(f"    ROIs with positive signal (>0): {np.sum(np.array(bg_subtracted) > 0)}/{len(bg_subtracted)}")
+
+            # Create output filename using dataset name and config output name
+            output_name = f"{dataset_name}_{config['output_name']}"
+
+            # Save results
+            save_summary_statistics(results, data_dir, output_name)
+            visualize_roi_histograms(results, data_dir, output_name)
 
         print()
 
