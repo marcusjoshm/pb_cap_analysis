@@ -1,6 +1,6 @@
 #!/bin/bash
 # Base directory
-BASE_DIR="/Volumes/NX-01-A/2025-12-16_cap_analysis"
+BASE_DIR="/Volumes/NX-01-A/2025-12-17_cap_analysis"
 
 # Clean up macOS dot files before processing
 echo "Running dot_clean on ${BASE_DIR}..."
