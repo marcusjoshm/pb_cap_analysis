@@ -1,250 +1,336 @@
 # Microscopy Intensity Analysis
 
-Universal Python analysis pipeline for analyzing microscopy intensity data using per-ROI local background subtraction.
+Universal Python analysis pipeline for analyzing microscopy intensity data using per-ROI local background subtraction with Gaussian peak detection.
 
 ## Overview
 
-This pipeline analyzes microscopy images to measure intensity in regions of interest (ROIs) with local background subtraction. It uses per-ROI background subtraction based on dilated region intensity analysis with Gaussian peak detection. Originally developed for P-body Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity measurement.
+This pipeline analyzes microscopy images to measure intensity in regions of interest (ROIs) with local background subtraction. It uses per-ROI background subtraction based on dilated region intensity analysis with Gaussian peak detection. Originally developed for P-body (PB) and Stress Granule (SG) m7G Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity measurement.
+
+The pipeline gracefully handles cases where some analysis configurations may not have all required files (e.g., SG analysis when no stress granules are present in untreated samples).
 
 ## Features
 
-- **Universal Intensity Analysis**: Works with any intensity image - no longer limited to specific markers (Cap, G3BP1, etc.)
-- **Background Subtraction**: Two methods available:
-  - `minimum`: Uses minimum background region intensity
-  - `gaussian_peaks`: Detects Gaussian peaks in background region histograms to identify true background (handles ROIs near high-intensity structures)
-- **Per-ROI Analysis**: Each ROI is analyzed individually with its own local background region
-- **ROI Support**: Uses ImageJ ROI zip files for precise region definitions
-- **Visualization**: Generates intensity maps and background region histograms
-- **Flexible File Naming**: Automatically detects any `.tif` file with "intensity" in the filename
+- **Multi-Configuration Analysis**: Simultaneously analyzes multiple intensity/ROI combinations:
+  - PB_Cap: P-body cap enrichment
+  - DDX6: P-body marker protein intensity
+  - SG_Cap: Stress granule cap enrichment
+  - G3BP1: Stress granule marker protein intensity
+- **Gaussian Peak Detection**: Detects peaks in background region histograms to identify true background intensity
+- **Per-ROI Local Background Subtraction**: Each ROI is analyzed with its own local background region
+- **Flexible File Matching**: Keyword-based file matching works with various naming conventions
+- **Graceful Handling of Missing Files**: Automatically skips configurations when required files aren't present
+- **Dot File Filtering**: Ignores macOS hidden files (`.DS_Store`, `._*` files)
+- **Interactive Parameter Configuration**: Prompts for per-configuration analysis parameters
+- **Visualization**: Generates background intensity histograms showing detected peaks
+- **CSV Export**: Detailed per-ROI statistics with all measurements
 
-## Setup
+## System Requirements
 
-### Prerequisites
+### Operating Systems
 
-- Python 3.8 or higher
-- pip
+- **macOS**: 10.14 (Mojave) or later (fully tested)
+- **Linux**: Ubuntu 18.04+, CentOS 7+, or equivalent distributions
+- **Windows**: Windows 10 or later (with Python installed)
 
-### Installation
+### Hardware Requirements
 
-1. Clone the repository:
+- **Minimum**: 4 GB RAM, 2 CPU cores
+- **Recommended**: 8+ GB RAM, 4+ CPU cores (for processing large datasets)
+- **Storage**: Sufficient space for input images and output files (typically 2-3x input data size)
+
+### Software Prerequisites
+
+- **Python**: Version 3.8 or higher
+- **pip**: Python package installer (included with Python)
+- **ImageJ/Fiji**: Required for generating ROI files (not required for running the analysis script)
+
+## Software Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| numpy | >=1.20.0 | Array operations and numerical computing |
+| pillow | >=8.0.0 | Image file I/O |
+| tifffile | >=2021.1.1 | TIFF file handling |
+| matplotlib | >=3.4.0 | Visualization and histogram generation |
+| scipy | >=1.7.0 | Gaussian filtering and peak detection |
+| roifile | >=2021.6.6 | ImageJ ROI file reading |
+| scikit-image | >=0.18.0 | Image processing (polygon drawing, contour detection) |
+
+## Installation
+
+### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/marcusjoshm/pb_cap_analysis.git
 cd pb_cap_analysis
 ```
 
-2. Create a virtual environment:
+### 2. Create a Virtual Environment (Recommended)
+
+**macOS/Linux:**
 ```bash
 python3 -m venv venv
-```
-
-3. Activate the virtual environment:
-```bash
 source venv/bin/activate
 ```
 
-4. Install dependencies:
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+
 ```bash
 pip install numpy pillow tifffile matplotlib scipy roifile scikit-image
 ```
 
+Or install from a requirements file (if provided):
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Verify Installation
+
+```bash
+python -c "import numpy, PIL, tifffile, matplotlib, scipy, roifile, skimage; print('All dependencies installed successfully!')"
+```
+
+## Demo Instructions
+
+### Sample Data
+
+Sample data will be provided in a future release. The sample dataset will include:
+- Pre-processed intensity images (`.tif` files)
+- ImageJ ROI files (`.zip` files) for P-bodies and stress granules
+- Expected output files for validation
+
+### Running the Demo
+
+Once sample data is available:
+
+1. Download and extract the sample data to a directory (e.g., `~/sample_data/`)
+
+2. Run the analysis:
+```bash
+python analyze_intensity.py ~/sample_data/
+```
+
+3. Follow the interactive prompts to configure analysis parameters (or press Enter to accept defaults)
+
+4. Check the output files in each condition subdirectory:
+   - `*_intensity_analysis.csv` - Per-ROI statistics
+   - `*_background_histograms.png` - Visualization of detected peaks
+
 ## Usage
 
-### 1. Extract Microscopy Data
-
-Extract intensity values and create perimeter masks:
+### Basic Usage
 
 ```bash
-python extract_microscopy_data.py
+python analyze_intensity.py /path/to/your/data
 ```
 
-This script:
-- Loads mask and intensity images
-- Creates perimeter masks (donut-shaped regions)
-- Extracts intensity arrays for mask and perimeter regions
-- Generates visualization plots with viridis colormap
-- Saves perimeter masks as 8-bit TIFF files (values: 0 and 255)
-
-### 2. Analyze Intensity
-
-Perform per-ROI background subtraction and intensity analysis:
-
+Or use the default path:
 ```bash
-python analyze_enrichment.py /path/to/your/data
+python analyze_intensity.py
 ```
 
-Or use the default path (if not modified):
+### Interactive Configuration
 
-```bash
-python analyze_enrichment.py
+When you run the script, you'll be prompted to configure parameters for each analysis type:
+
+```
+============================================================
+CONFIGURATION PARAMETERS
+============================================================
+Please enter parameters for each analysis configuration.
+Press Enter to use default values shown in brackets.
+
+--- PB_Cap Configuration ---
+  ROI enlargement pixels [0]:
+  Maximum background threshold [None]:
+
+--- DDX6 Configuration ---
+  ROI enlargement pixels [0]:
+  Maximum background threshold [None]: 100
+
+--- SG_Cap Configuration ---
+  ROI enlargement pixels [0]: 5
+  Maximum background threshold [None]:
+
+--- G3BP1 Configuration ---
+  ROI enlargement pixels [0]: 5
+  Maximum background threshold [None]: 150
 ```
 
-**Command-line options:**
+### Parameter Descriptions
 
-- No arguments: Uses default path `/Volumes/NX-01-A/2025-10-08_test_data`
-- One argument: Custom base directory path containing subdirectories with data
-- `--bg-factor`: Multiplication factor for background subtraction (default: 1.0)
-- `--max-background`: Maximum background value threshold. Only peaks below this value will be considered for background (default: None, no constraint)
-- `--enlarge-rois`: Number of pixels to enlarge dilated ROIs using binary dilation (default: 0, no enlargement)
+#### ROI Enlargement (`enlarge_rois`)
+- **Default**: 0 (no enlargement)
+- **Purpose**: Expands background ROIs by the specified number of pixels using binary dilation
+- **When to use**: When the default dilated mask doesn't provide enough background pixels
+- **Effect**: Larger background regions for more robust background estimation
 
-**Examples with command-line options:**
+#### Maximum Background Threshold (`max_background`)
+- **Default**: None (no constraint)
+- **Purpose**: Constrains background peak selection to only consider peaks below this threshold
+- **When to use**: When you have prior knowledge that true background should be below a certain value
+- **Effect**: Prevents selection of spurious high-intensity peaks as background
 
-```bash
-# Apply 0.8x multiplication to background values (more conservative background subtraction)
-python analyze_enrichment.py /path/to/your/data --bg-factor 0.8
+### Analysis Configurations
 
-# Apply 1.2x multiplication to background values (more aggressive background subtraction)
-python analyze_enrichment.py /path/to/your/data --bg-factor 1.2
+The script processes four analysis configurations for each dataset:
 
-# Force background peak selection below 100 (useful when you know true background is low)
-python analyze_enrichment.py /path/to/your/data --max-background 100
+| Configuration | Intensity File | ROI Mask | Description |
+|---------------|----------------|----------|-------------|
+| PB_Cap | `*Cap*Intensity*` | `*PB*Mask*` | P-body cap enrichment |
+| DDX6 | `*DDX6*Intensity*` | `*PB*Mask*` | DDX6 protein in P-bodies |
+| SG_Cap | `*Cap*Intensity*` | `*SG*Mask*` | Stress granule cap enrichment |
+| G3BP1 | `*G3BP1*Intensity*` | `*SG*Mask*` | G3BP1 protein in stress granules |
 
-# Enlarge perimeter ROIs by 5 pixels to capture more background
-python analyze_enrichment.py /path/to/your/data --enlarge-rois 5
-
-# Combine multiple options
-python analyze_enrichment.py /path/to/your/data --bg-factor 1.0 --max-background 100 --enlarge-rois 5
-
-# Default behavior (1.0x factor, no constraint, no enlargement)
-python analyze_enrichment.py /path/to/your/data
-```
-
-**Parameter descriptions:**
-
-- **`--bg-factor`**: Adjusts background subtraction stringency. Values < 1.0 result in more conservative background estimates (less background subtracted), while values > 1.0 result in more aggressive background subtraction.
-
-- **`--max-background`**: Constrains background peak selection to only consider peaks below this threshold. When set:
-  - Selects the most prominent peak below the threshold
-  - If no peaks detected below threshold, uses the histogram bin with highest frequency below threshold
-  - Useful for datasets where you know the true background should be low (e.g., < 100)
-  - When not set (default), uses the leftmost (lowest intensity) detected peak
-
-- **`--enlarge-rois`**: Expands the background ROIs by the specified number of pixels using binary dilation. This increases the region used for background estimation, which can be helpful when the default background region is too narrow.
-
-This script:
-
-- Automatically scans all subdirectories in the base directory
-- Loads ImageJ ROI files for regions and background regions
-- Analyzes each ROI individually
-- Detects Gaussian peaks in background region intensity histograms
-- Performs background subtraction using appropriate peak values
-- Exports CSV files with detailed statistics
-- Creates histogram visualizations for each ROI
-- Skips subdirectories missing required files with informative messages
+**Note**: SG configurations are automatically skipped if no SG files are present (e.g., untreated samples without stress granules).
 
 ## Input Data Structure
 
-Expected directory structure:
+### Expected Directory Structure
+
 ```
 /path/to/data/
 ├── Condition1/
-│   ├── *Mask*.tif                  # ROI mask
-│   ├── *Dilated*Mask*.tif          # Dilated mask (for background region, optional)
-│   ├── *Intensity*.tif             # ANY intensity image (e.g., Cap, GFP, mCherry, etc.)
-│   ├── *Mask*.zip                  # ImageJ ROIs for regions of interest
-│   └── *Dilated*.zip               # ImageJ ROIs for background regions (dilated regions)
-└── Condition2/
-    └── (same structure)
+│   ├── Condition1_Cap_Intensity.tif       # Cap channel intensity image
+│   ├── Condition1_DDX6_Intensity.tif      # DDX6 channel intensity image
+│   ├── Condition1_G3BP1_Intensity.tif     # G3BP1 channel intensity (if SG present)
+│   ├── Condition1_PB_Mask.zip             # P-body ROIs
+│   ├── Condition1_PB_Dilated_Mask.zip     # Dilated P-body ROIs (background)
+│   ├── Condition1_SG_Mask.zip             # Stress granule ROIs (if SG present)
+│   └── Condition1_SG_Dilated_Mask.zip     # Dilated SG ROIs (if SG present)
+├── Condition2/
+│   └── (same structure)
+└── Condition3/
+    └── (same structure, SG files optional)
 ```
 
-**Key Requirements:**
-- Intensity images must contain "intensity" in the filename (case-insensitive)
-- The script accepts **any** `.tif` file with "intensity" in the name
-- No specific marker name (like "Cap" or "G3BP1") is required in the filename
-- Examples of valid intensity filenames:
-  - `sample_intensity.tif`
-  - `GFP_Intensity.tif`
-  - `Cap_intensity_channel1.tif`
-  - `intensity_map.tif`
+### File Naming Requirements
+
+Files are matched using case-insensitive keyword matching:
+
+| File Type | Required Keywords | Exclude Keywords |
+|-----------|-------------------|------------------|
+| Cap Intensity | `Cap`, `Intensity` | - |
+| DDX6 Intensity | `DDX6`, `Intensity` | - |
+| G3BP1 Intensity | `G3BP1`, `Intensity` | - |
+| PB Mask | `PB`, `Mask` | `Dilated` |
+| PB Dilated Mask | `PB`, `Dilated`, `Mask` | - |
+| SG Mask | `SG`, `Mask` | `Dilated` |
+| SG Dilated Mask | `SG`, `Dilated`, `Mask` | - |
 
 ## Output Files
 
-### Data Extraction
-- `{dataset}_Cap_Full.png` - Full Cap intensity visualization (if using Cap data)
-- `{dataset}_Cap_Perimeter.png` - Cap intensity at perimeter only (if using Cap data)
-- `{dataset}_G3BP1_Full.png` - Full G3BP1 intensity visualization (if using G3BP1 data)
-- `{dataset}_G3BP1_Perimeter.png` - G3BP1 intensity at perimeter only (if using G3BP1 data)
-- `*Perimeter Mask.tif` - Binary perimeter masks (8-bit)
+### Per-Configuration Output
 
-### Intensity Analysis
-- `{dataset}_intensity_analysis.csv` - Per-ROI statistics including:
-  - ROI ID and ROI name
-  - Raw and background-subtracted intensities
-  - Background values
-  - Background region statistics
-  - **CSV Column Names**:
-    - `roi_id`, `roi_name`
-    - `mean_raw`, `median_raw`
-    - `background`
-    - `mean_bg_subtracted`, `median_bg_subtracted`
-    - `background_mean`, `background_std`
-    - `n_pixels`, `n_background_pixels`
-  - **Note**: Negative values (from background subtraction) are replaced with empty cells in the CSV
-- `{dataset}_background_histograms.png` - Histogram visualizations showing detected peaks
+For each successfully analyzed configuration, two files are generated:
+
+#### CSV Statistics (`{dataset}_{config}_intensity_analysis.csv`)
+
+| Column | Description |
+|--------|-------------|
+| `roi_id` | 1-indexed ROI identifier |
+| `roi_name` | Original ROI name from ImageJ |
+| `n_pixels` | Number of pixels in ROI |
+| `n_background_pixels` | Number of pixels in background region |
+| `mean_raw` | Mean raw intensity in ROI |
+| `median_raw` | Median raw intensity in ROI |
+| `background` | Detected background value |
+| `mean_bg_subtracted` | Mean background-subtracted intensity |
+| `median_bg_subtracted` | Median background-subtracted intensity |
+| `background_mean` | Mean of background region intensities |
+| `background_std` | Standard deviation of background region |
+
+**Note**: Negative values (when ROI intensity < background) are replaced with empty cells in the CSV.
+
+#### Histogram Visualization (`{dataset}_{config}_background_histograms.png`)
+
+- Shows background intensity distributions for up to 9 ROIs
+- Displays detected peaks (green dashed lines)
+- Highlights selected background value (blue solid line)
+- Includes smoothed histogram overlay (red line)
 
 ## Methods
 
-### Background Subtraction Approaches
+### Gaussian Peak Detection Algorithm
 
-1. **Gaussian Peak Detection** (default):
-   - Analyzes background region intensity histogram with range starting at 0 to capture near-zero peaks
-   - Uses 15% of maximum histogram count as minimum prominence threshold to detect significant peaks
-   - Detects peaks in smoothed histogram (Gaussian filter with sigma=2)
-   - **Default mode** (no `--max-background`): Uses the leftmost (lowest intensity) detected peak as background
-   - **Constrained mode** (with `--max-background`): Only considers peaks below the specified threshold
-     - Selects the most prominent peak below the threshold
-     - If no peaks detected, uses the histogram bin with highest frequency below the threshold
-     - Ensures background values stay within expected range
-   - Multiple peaks → assumes higher peak is from nearby high-intensity structure
-   - Fallback: If no peaks detected at all, uses the bin with maximum count as background
+1. **Histogram Creation**: Background region intensities are binned into 50 bins (range: 0 to max value)
 
-2. **Minimum Value**:
-   - Uses minimum background region intensity as background
-   - Simpler but may overestimate signal if minimum is anomalously low
+2. **Smoothing**: Gaussian filter (sigma=2) applied to reduce noise
+
+3. **Peak Detection**: scipy's `find_peaks` with 15% prominence threshold
+
+4. **Background Selection**:
+   - **Default mode**: Uses the leftmost (lowest intensity) detected peak
+   - **Constrained mode** (with `max_background`):
+     - Selects most prominent peak below threshold
+     - Falls back to highest-frequency bin below threshold if no peaks detected
+
+5. **Fallback**: If no peaks detected, uses the bin with maximum count
 
 ### ROI Enlargement
 
-The `--enlarge-rois` parameter allows expanding background ROIs for background estimation:
-- Uses binary dilation with 4-connected structuring element (equivalent to ImageJ's RoiEnlarger)
-- Expands the background region by the specified number of pixels
-- Useful when the default dilated mask doesn't provide enough background pixels for reliable background estimation
-- Example: `--enlarge-rois 5` expands each background ROI by 5 pixels in all directions
+- Uses binary dilation with 4-connected structuring element
+- Equivalent to ImageJ's RoiEnlarger functionality
+- Contours are extracted from enlarged masks to create new ROI coordinates
 
-### Background Multiplication Factor
+### Background Subtraction
 
-The `--bg-factor` parameter allows fine-tuning of background subtraction:
-- **Values < 1.0** (e.g., 0.8): More conservative - reduces the background value before subtraction, resulting in lower background-subtracted values
-- **Values = 1.0**: Default - uses the detected background value as-is
-- **Values > 1.0** (e.g., 1.2): More aggressive - increases the background value before subtraction, resulting in higher background-subtracted values
+For each ROI:
+1. Extract intensity values within ROI mask
+2. Extract intensity values within dilated (background) mask
+3. Detect background value using Gaussian peak detection
+4. Subtract background from ROI intensities
+5. Calculate statistics (mean, median) for raw and background-subtracted values
 
-This is useful when you want to adjust for systematic over- or under-estimation of background.
+## Troubleshooting
 
-### Maximum Background Constraint
+### Common Issues
 
-The `--max-background` parameter constrains background peak selection:
-- Ensures background values don't exceed a known threshold for your dataset
-- Useful when you have prior knowledge about expected background intensity ranges
-- Example: If you know true background is around 20 and never exceeds 100, use `--max-background 100`
-- Helps avoid selecting spurious high-intensity peaks as background
-- When used, the algorithm prioritizes peaks below the threshold based on prominence
-- Fallback uses the highest frequency histogram bin below the threshold if no peaks are detected
+**"No subdirectories found"**
+- Ensure the base directory contains subdirectories with data files
+- Check that subdirectories are not hidden (don't start with `.`)
 
-### Negative Value Handling
+**"Skipping [config]: No intensity file found"**
+- Verify intensity files contain the required keywords (e.g., `Cap`, `Intensity`)
+- Check file extensions are `.tif`
 
-After background subtraction, some ROIs may have negative values (ROI intensity < background). In the output CSV:
-- **Negative values are replaced with empty cells**
-- This prevents misleading negative values
-- Empty cells make it easy to identify ROIs where signal is below background
-- All other numeric and non-numeric values are preserved as-is
+**"Skipping [config]: No mask file found"**
+- Ensure ROI zip files are present with correct naming
+- Verify files contain required keywords (e.g., `PB`, `Mask`)
 
-## Dependencies
+**Import errors**
+- Reinstall dependencies: `pip install --upgrade numpy pillow tifffile matplotlib scipy roifile scikit-image`
+- Verify Python version: `python --version` (must be 3.8+)
 
-- numpy - Array operations
-- pillow - Image I/O
-- tifffile - TIFF file handling
-- matplotlib - Visualization
-- scipy - Peak detection and signal processing
-- roifile - ImageJ ROI file reading
-- scikit-image - Image processing (polygon drawing)
+### Performance Tips
+
+- Process smaller batches if memory is limited
+- Close other applications when processing large datasets
+- Use SSD storage for faster file I/O
+
+## ImageJ Macros
+
+The `Macros/` directory contains ImageJ macros for preprocessing:
+
+- **PB_Macro.ijm**: P-body analysis with stress granule subtraction
+- **SG_Macro.ijm**: Stress granule ROI extraction
+- **copy_masks_and_raw.sh**: Organizes raw data into analysis directory structure
+- **copy_ch0_to_processed.sh**: Copies Cap intensity files to processed directories
+
+These macros prepare data for the Python analysis pipeline.
+
+## Workflow Integration
+
+This script is designed to work with outputs from:
+1. **PerCell** analysis software (combined_masks and raw_data directories)
+2. **ImageJ/Fiji** ROI Manager exports
+3. Custom preprocessing pipelines that generate compatible file structures
 
 ## License
 
@@ -253,3 +339,29 @@ MIT License
 ## Author
 
 Joshua Marcus
+
+## Citation
+
+If you use this software in your research, please cite:
+```
+Marcus, J. (2024). Microscopy Intensity Analysis Pipeline.
+https://github.com/marcusjoshm/pb_cap_analysis
+```
+
+## Contributing
+
+Contributions are welcome! Please submit issues and pull requests to the GitHub repository.
+
+## Changelog
+
+### v2.0.0 (2025-01)
+- Removed background multiplication factor (`bg_factor`) parameter
+- Added dot file filtering for macOS compatibility
+- Improved handling of missing files (graceful skipping)
+- Updated to match PerCell plugin implementation
+- Enhanced documentation and error messages
+
+### v1.0.0 (2024-10)
+- Initial release with per-ROI background subtraction
+- Gaussian peak detection for background estimation
+- Multi-configuration analysis support
