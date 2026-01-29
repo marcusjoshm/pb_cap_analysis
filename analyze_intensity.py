@@ -511,66 +511,6 @@ def get_analysis_configurations():
     ]
 
 
-def prompt_for_config_parameters(configs):
-    """
-    Prompt user to enter parameters for each analysis configuration.
-
-    Args:
-        configs: List of configuration dictionaries
-
-    Returns:
-        Updated list of configuration dictionaries with user-provided parameters
-    """
-    print("\n" + "=" * 60)
-    print("CONFIGURATION PARAMETERS")
-    print("=" * 60)
-    print("Please enter parameters for each analysis configuration.")
-    print("Press Enter to use default values shown in brackets.\n")
-
-    for config in configs:
-        print(f"\n--- {config['name']} Configuration ---")
-
-        # ROI enlargement
-        while True:
-            try:
-                enlarge_input = input("  ROI enlargement pixels [0]: ").strip()
-                if enlarge_input == "":
-                    config['enlarge_rois'] = 0
-                    break
-                enlarge_val = int(enlarge_input)
-                config['enlarge_rois'] = enlarge_val
-                break
-            except ValueError:
-                print("    Error: Please enter a valid integer.")
-
-        # Max background
-        while True:
-            try:
-                max_bg_input = input("  Maximum background threshold [None]: ").strip()
-                if max_bg_input == "" or max_bg_input.lower() == "none":
-                    config['max_background'] = None
-                    break
-                max_bg_val = float(max_bg_input)
-                if max_bg_val < 0:
-                    print("    Error: Maximum background must be non-negative. Please try again.")
-                    continue
-                config['max_background'] = max_bg_val
-                break
-            except ValueError:
-                print("    Error: Please enter a valid number or 'None'.")
-
-    print("\n" + "=" * 60)
-    print("CONFIGURATION SUMMARY")
-    print("=" * 60)
-    for config in configs:
-        print(f"\n{config['name']}:")
-        print(f"  ROI enlargement: {config['enlarge_rois']} pixels")
-        print(f"  Max background: {config['max_background']}")
-    print("=" * 60 + "\n")
-
-    return configs
-
-
 def main():
     """Main analysis function."""
     import argparse
@@ -579,6 +519,10 @@ def main():
     parser = argparse.ArgumentParser(description='Microscopy Intensity Analysis')
     parser.add_argument('base_dir', nargs='?', default="/Volumes/NX-01-A/2025-10-08_test_data",
                        help='Base directory containing subdirectories with microscopy data')
+    parser.add_argument('--roi-enlargement', type=int, default=0, metavar='PIXELS',
+                       help='Pixels to enlarge background ROIs by (default: 0)')
+    parser.add_argument('--max-background', type=float, default=None, metavar='VALUE',
+                       help='Maximum background threshold for peak detection; only peaks below this value are considered (default: None)')
 
     args = parser.parse_args()
 
@@ -597,10 +541,14 @@ def main():
         return
 
     print(f"Found {len(subdirs)} subdirectories to analyze")
+    print(f"ROI enlargement: {args.roi_enlargement} pixels")
+    print(f"Maximum background threshold: {args.max_background}")
 
-    # Get analysis configurations and prompt for parameters
+    # Get analysis configurations and apply command-line parameters
     analysis_configs = get_analysis_configurations()
-    analysis_configs = prompt_for_config_parameters(analysis_configs)
+    for config in analysis_configs:
+        config['enlarge_rois'] = args.roi_enlargement
+        config['max_background'] = args.max_background
 
     # Process each subdirectory
     for data_dir in subdirs:

@@ -20,7 +20,7 @@ The pipeline gracefully handles cases where some analysis configurations may not
 - **Flexible File Matching**: Keyword-based file matching works with various naming conventions
 - **Graceful Handling of Missing Files**: Automatically skips configurations when required files aren't present
 - **Dot File Filtering**: Ignores macOS hidden files (`.DS_Store`, `._*` files)
-- **Interactive Parameter Configuration**: Prompts for per-configuration analysis parameters
+- **Command-Line Flags**: Optional `--roi-enlargement` and `--max-background` flags for analysis parameters
 - **Visualization**: Generates background intensity histograms showing detected peaks
 - **CSV Export**: Detailed per-ROI statistics with all measurements
 
@@ -116,9 +116,12 @@ Once sample data is available:
 python analyze_intensity.py ~/sample_data/
 ```
 
-3. Follow the interactive prompts to configure analysis parameters (or press Enter to accept defaults)
+   Optionally specify ROI enlargement and maximum background threshold:
+```bash
+python analyze_intensity.py ~/sample_data/ --roi-enlargement 5 --max-background 100
+```
 
-4. Check the output files in each condition subdirectory:
+3. Check the output files in each condition subdirectory:
    - `*_intensity_analysis.csv` - Per-ROI statistics
    - `*_background_histograms.png` - Visualization of detected peaks
 
@@ -135,43 +138,36 @@ Or use the default path:
 python analyze_intensity.py
 ```
 
-### Interactive Configuration
+### Command-Line Flags
 
-When you run the script, you'll be prompted to configure parameters for each analysis type:
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--roi-enlargement` | int | 0 | Pixels to enlarge background ROIs by (binary dilation). Use when the default dilated mask doesn't provide enough background pixels. |
+| `--max-background` | float | None | Maximum background threshold for peak detection; only peaks below this value are considered. Use when true background should be below a known value. |
 
-```
-============================================================
-CONFIGURATION PARAMETERS
-============================================================
-Please enter parameters for each analysis configuration.
-Press Enter to use default values shown in brackets.
+**Examples:**
 
---- PB_Cap Configuration ---
-  ROI enlargement pixels [0]:
-  Maximum background threshold [None]:
+```bash
+# Default (no enlargement, no max background constraint)
+python analyze_intensity.py /path/to/data
 
---- DDX6 Configuration ---
-  ROI enlargement pixels [0]:
-  Maximum background threshold [None]: 100
+# Enlarge background ROIs by 5 pixels
+python analyze_intensity.py /path/to/data --roi-enlargement 5
 
---- SG_Cap Configuration ---
-  ROI enlargement pixels [0]: 5
-  Maximum background threshold [None]:
+# Constrain background peak to values below 100
+python analyze_intensity.py /path/to/data --max-background 100
 
---- G3BP1 Configuration ---
-  ROI enlargement pixels [0]: 5
-  Maximum background threshold [None]: 150
+# Both options
+python analyze_intensity.py /path/to/data --roi-enlargement 5 --max-background 100
 ```
 
-### Parameter Descriptions
-
-#### ROI Enlargement (`enlarge_rois`)
+#### ROI Enlargement (`--roi-enlargement`)
 - **Default**: 0 (no enlargement)
 - **Purpose**: Expands background ROIs by the specified number of pixels using binary dilation
 - **When to use**: When the default dilated mask doesn't provide enough background pixels
 - **Effect**: Larger background regions for more robust background estimation
 
-#### Maximum Background Threshold (`max_background`)
+#### Maximum Background Threshold (`--max-background`)
 - **Default**: None (no constraint)
 - **Purpose**: Constrains background peak selection to only consider peaks below this threshold
 - **When to use**: When you have prior knowledge that true background should be below a certain value
