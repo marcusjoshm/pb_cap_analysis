@@ -523,6 +523,8 @@ def main():
                        help='Pixels to enlarge background ROIs by (default: 0)')
     parser.add_argument('--max-background', type=float, default=None, metavar='VALUE',
                        help='Maximum background threshold for peak detection; only peaks below this value are considered (default: None)')
+    parser.add_argument('--plot-histograms', action='store_true',
+                       help='Generate and save background intensity histogram plots (default: do not generate)')
 
     args = parser.parse_args()
 
@@ -633,7 +635,8 @@ def main():
 
             # Save results
             save_summary_statistics(results, data_dir, output_name)
-            visualize_roi_histograms(results, data_dir, output_name)
+            if args.plot_histograms:
+                visualize_roi_histograms(results, data_dir, output_name)
 
         print()
 

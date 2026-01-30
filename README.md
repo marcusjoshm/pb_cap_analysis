@@ -1,28 +1,10 @@
-# Microscopy Intensity Analysis
+# Condensate-localized m7G signal immunofluorescence intensity analysis script
 
-Universal Python analysis pipeline for analyzing microscopy intensity data using per-ROI local background subtraction with Gaussian peak detection.
+Python script for quantifying m7G-cap immunofluorescence within P-bodies and stress granules, implementing the automated local background subtraction and histogram-based peak detection described in the manuscript *mRNA decapping is partitioned by condensed and dilute phase mechanisms*.
 
 ## Overview
 
-This pipeline analyzes microscopy images to measure intensity in regions of interest (ROIs) with local background subtraction. It uses per-ROI background subtraction based on dilated region intensity analysis with Gaussian peak detection. Originally developed for P-body (PB) and Stress Granule (SG) m7G Cap enrichment analysis, it has been refactored to work with any type of microscopy intensity measurement.
-
-The pipeline gracefully handles cases where some analysis configurations may not have all required files (e.g., SG analysis when no stress granules are present in untreated samples).
-
-## Features
-
-- **Multi-Configuration Analysis**: Simultaneously analyzes multiple intensity/ROI combinations:
-  - PB_Cap: P-body cap enrichment
-  - DDX6: P-body marker protein intensity
-  - SG_Cap: Stress granule cap enrichment
-  - G3BP1: Stress granule marker protein intensity
-- **Gaussian Peak Detection**: Detects peaks in background region histograms to identify true background intensity
-- **Per-ROI Local Background Subtraction**: Each ROI is analyzed with its own local background region
-- **Flexible File Matching**: Keyword-based file matching works with various naming conventions
-- **Graceful Handling of Missing Files**: Automatically skips configurations when required files aren't present
-- **Dot File Filtering**: Ignores macOS hidden files (`.DS_Store`, `._*` files)
-- **Command-Line Flags**: Optional `--roi-enlargement` and `--max-background` flags for analysis parameters
-- **Visualization**: Generates background intensity histograms showing detected peaks
-- **CSV Export**: Detailed per-ROI statistics with all measurements
+This script quantifies m7G signals within P-bodies and stress granules using a local background subtraction to account for spatial heterogeneity of m7G fluorescence across the cell. The program takes immunofluoresce micrographs of m7G intensity, ROI lists from imageJ of P-bodys and/or stress granules, and corresponding lists of ROIs that have been dilated. The program then uses the space surrounding each condensate created by the condensate ROIs and dilated ROIs to calculate a locat background for each condensate as described in the methods section. The program will output a .csv file containing background subtracted intesity values for each condensate in the provided ROI lists.
 
 ## System Requirements
 
@@ -122,8 +104,8 @@ python analyze_intensity.py ~/sample_data/ --roi-enlargement 5 --max-background 
 ```
 
 3. Check the output files in each condition subdirectory:
-   - `*_intensity_analysis.csv` - Per-ROI statistics
-   - `*_background_histograms.png` - Visualization of detected peaks
+   - `*_intensity_analysis.csv` - Per-ROI statistics (always generated)
+   - `*_background_histograms.png` - Visualization of detected peaks (only if you used `--plot-histograms`)
 
 ## Usage
 
@@ -142,13 +124,14 @@ python analyze_intensity.py
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--roi-enlargement` | int | 0 | Pixels to enlarge background ROIs by (binary dilation). Use when the default dilated mask doesn't provide enough background pixels. |
+| `--roi-enlargement` | int | 0 | Pixels to further enlarge dilated ROIs by (binary dilation). Use when the default dilated mask doesn't provide enough background pixels. |
 | `--max-background` | float | None | Maximum background threshold for peak detection; only peaks below this value are considered. Use when true background should be below a known value. |
+| `--plot-histograms` | flag | off | Generate and save background intensity histogram PNGs for each configuration (see [Histogram plots](#histogram-plots) below). |
 
 **Examples:**
 
 ```bash
-# Default (no enlargement, no max background constraint)
+# Default (no enlargement, no max background constraint, no histogram plots)
 python analyze_intensity.py /path/to/data
 
 # Enlarge background ROIs by 5 pixels
@@ -157,8 +140,11 @@ python analyze_intensity.py /path/to/data --roi-enlargement 5
 # Constrain background peak to values below 100
 python analyze_intensity.py /path/to/data --max-background 100
 
-# Both options
-python analyze_intensity.py /path/to/data --roi-enlargement 5 --max-background 100
+# Generate histogram plots (saved as *_background_histograms.png per config)
+python analyze_intensity.py /path/to/data --plot-histograms
+
+# Combine options
+python analyze_intensity.py /path/to/data --roi-enlargement 5 --max-background 100 --plot-histograms
 ```
 
 #### ROI Enlargement (`--roi-enlargement`)
@@ -173,6 +159,13 @@ python analyze_intensity.py /path/to/data --roi-enlargement 5 --max-background 1
 - **When to use**: When you have prior knowledge that true background should be below a certain value
 - **Effect**: Prevents selection of spurious high-intensity peaks as background
 
+#### Histogram plots
+- **Flag**: `--plot-histograms`
+- **Default**: Off (no histogram PNGs are generated)
+- **Purpose**: When set, saves a background intensity histogram figure for each successfully analyzed configuration
+- **Output**: One PNG per config per condition, e.g. `{Condition}_PB_Cap_background_histograms.png`, written into the condition folder. Each figure shows up to 9 ROIs: histogram of background-region intensities, smoothed curve, detected peaks (green dashed lines), and selected background value (blue line).
+- **When to use**: For quality control and inspecting peak detection; omit for batch runs when only CSV results are needed.
+
 ### Analysis Configurations
 
 The script processes four analysis configurations for each dataset:
@@ -186,29 +179,78 @@ The script processes four analysis configurations for each dataset:
 
 **Note**: SG configurations are automatically skipped if no SG files are present (e.g., untreated samples without stress granules).
 
-## Input Data Structure
+## Input folder: contents, structure, and naming
 
-### Expected Directory Structure
+### What needs to be in the input folder
+
+The input path must be a **base directory** that contains **one subdirectory per condition** (e.g. per treatment or replicate). Do not put files directly in the base directory.
+
+Inside each condition subdirectory you need:
+
+**For P-body (PB) analyses (required for every condition):**
+- One **intensity image** for m7G cap: TIFF whose name contains `Cap` and `Intensity`.
+- One **intensity image** for DDX6: TIFF whose name contains `DDX6` and `Intensity`.
+- One **P-body ROI set**: ImageJ ROI zip whose name contains `PB` and `Mask` but not `Dilated`.
+- One **dilated P-body ROI set**: ImageJ ROI zip whose name contains `PB`, `Dilated`, and `Mask`.
+
+**For stress granule (SG) analyses (only when stress granules are present):**
+- One **intensity image** for m7G cap: same Cap/Intensity TIFF as above.
+- One **intensity image** for G3BP1: TIFF whose name contains `G3BP1` and `Intensity`.
+- One **stress granule ROI set**: ImageJ ROI zip whose name contains `SG` and `Mask` but not `Dilated`.
+- One **dilated stress granule ROI set**: ImageJ ROI zip whose name contains `SG`, `Dilated`, and `Mask`.
+
+All intensity images must be `.tif`; all ROI sets must be `.zip` (ImageJ ROI Manager export). Hidden/dot files (e.g. `.DS_Store`) are ignored.
+
+### Directory structure
+
+Use a two-level layout: **base directory → one folder per condition**. All condition-specific files live inside that condition’s folder. Example using the test dataset path:
 
 ```
-/path/to/data/
-├── Condition1/
-│   ├── Condition1_Cap_Intensity.tif       # Cap channel intensity image
-│   ├── Condition1_DDX6_Intensity.tif      # DDX6 channel intensity image
-│   ├── Condition1_G3BP1_Intensity.tif     # G3BP1 channel intensity (if SG present)
-│   ├── Condition1_PB_Mask.zip             # P-body ROIs
-│   ├── Condition1_PB_Dilated_Mask.zip     # Dilated P-body ROIs (background)
-│   ├── Condition1_SG_Mask.zip             # Stress granule ROIs (if SG present)
-│   └── Condition1_SG_Dilated_Mask.zip     # Dilated SG ROIs (if SG present)
-├── Condition2/
-│   └── (same structure)
-└── Condition3/
-    └── (same structure, SG files optional)
+/Users/leelab/Desktop/Test_m7G_cap_data/
+├── Untreated/
+│   ├── Untreated_Cap_Intensity.tif
+│   ├── Untreated_DDX6_Intensity.tif
+│   ├── Untreated_G3BP1_Intensity.tif
+│   ├── Untreated_PB_Mask.zip
+│   └── Untreated_PB_Dilated_Mask.zip
+└── 1Hr_NaAsO2/
+    ├── 1Hr_NaAsO2_Cap_Intensity.tif
+    ├── 1Hr_NaAsO2_DDX6_Intensity.tif
+    ├── 1Hr_NaAsO2_G3BP1_Intensity.tif
+    ├── 1Hr_NaAsO2_PB_Mask.zip
+    ├── 1Hr_NaAsO2_PB_Dilated_Mask.zip
+    ├── 1Hr_NaAsO2_SG_Mask.zip
+    └── 1Hr_NaAsO2_SG_Dilated_Mask.zip
 ```
 
-### File Naming Requirements
+- **Untreated**: only P-body files are required; SG files can be omitted and SG analyses will be skipped.
+- **1Hr_NaAsO2** (stress condition): include both PB and SG mask/dilated-mask pairs to run all four analyses (PB_Cap, DDX6, SG_Cap, G3BP1).
 
-Files are matched using case-insensitive keyword matching:
+### File naming
+
+Filenames are matched **case-insensitively** by **keywords**. The condition folder name does not need to match the filename prefix; the script only requires that the right keywords appear in the filename.
+
+**Pattern:** use a consistent prefix (e.g. condition name) plus the keywords below. Examples from the test dataset:
+
+| What you need | Keywords in filename | Example (test data) |
+|---------------|----------------------|----------------------|
+| m7G cap intensity | `Cap`, `Intensity` | `Untreated_Cap_Intensity.tif` |
+| DDX6 intensity | `DDX6`, `Intensity` | `Untreated_DDX6_Intensity.tif` |
+| G3BP1 intensity | `G3BP1`, `Intensity` | `1Hr_NaAsO2_G3BP1_Intensity.tif` |
+| P-body ROIs (condensate) | `PB`, `Mask` — must **not** contain `Dilated` | `Untreated_PB_Mask.zip` |
+| P-body ROIs (dilated, for background) | `PB`, `Dilated`, `Mask` | `Untreated_PB_Dilated_Mask.zip` |
+| Stress granule ROIs (condensate) | `SG`, `Mask` — must **not** contain `Dilated` | `1Hr_NaAsO2_SG_Mask.zip` |
+| Stress granule ROIs (dilated) | `SG`, `Dilated`, `Mask` | `1Hr_NaAsO2_SG_Dilated_Mask.zip` |
+
+**Rules:**
+- Intensity files: extension `.tif`.
+- ROI files: ImageJ ROI export as `.zip`.
+- Mask and dilated-mask files must be **different** files (script will skip if the same file is used for both).
+- For SG analyses you must have both the SG mask zip and the SG dilated mask zip in that condition folder.
+
+### Keyword reference (for custom names)
+
+If you use different naming schemes, the script matches as follows:
 
 | File Type | Required Keywords | Exclude Keywords |
 |-----------|-------------------|------------------|
@@ -224,7 +266,7 @@ Files are matched using case-insensitive keyword matching:
 
 ### Per-Configuration Output
 
-For each successfully analyzed configuration, two files are generated:
+For each successfully analyzed configuration, a CSV file is always written. A histogram PNG is written only when `--plot-histograms` is used.
 
 #### CSV Statistics (`{dataset}_{config}_intensity_analysis.csv`)
 
@@ -244,7 +286,9 @@ For each successfully analyzed configuration, two files are generated:
 
 **Note**: Negative values (when ROI intensity < background) are replaced with empty cells in the CSV.
 
-#### Histogram Visualization (`{dataset}_{config}_background_histograms.png`)
+#### Histogram Visualization (`{dataset}_{config}_background_histograms.png`) — optional
+
+Only generated when you pass `--plot-histograms`.
 
 - Shows background intensity distributions for up to 9 ROIs
 - Displays detected peaks (green dashed lines)
