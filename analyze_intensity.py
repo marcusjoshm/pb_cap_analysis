@@ -409,15 +409,8 @@ def save_summary_statistics(analysis_results, data_dir, dataset_name):
         writer.writeheader()
 
         for roi in rois:
-            # Filter out peak_info and convert negative values to empty strings
-            row = {}
-            for k, v in roi.items():
-                if 'peak_info' not in k:
-                    # If the value is numeric and negative, use empty string
-                    if isinstance(v, (int, float, np.integer, np.floating)) and v < 0:
-                        row[k] = ''
-                    else:
-                        row[k] = v
+            # Filter out peak_info objects, keep all other values including negatives
+            row = {k: v for k, v in roi.items() if 'peak_info' not in k}
             writer.writerow(row)
 
     print(f"  Saved: {output_path.name}")

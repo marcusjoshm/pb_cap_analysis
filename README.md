@@ -284,7 +284,7 @@ For each successfully analyzed configuration, a CSV file is always written. A hi
 | `background_mean` | Mean of background region intensities |
 | `background_std` | Standard deviation of background region |
 
-**Note**: Negative values (when ROI intensity < background) are replaced with empty cells in the CSV.
+**Note**: Negative values may occur when ROI intensity is lower than the detected background. These values are reported as-is in the CSV.
 
 #### Histogram Visualization (`{dataset}_{config}_background_histograms.png`) — optional
 

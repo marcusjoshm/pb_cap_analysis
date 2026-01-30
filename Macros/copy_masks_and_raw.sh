@@ -1,6 +1,6 @@
 #!/bin/bash
 # Base directory
-BASE_DIR="/Volumes/NX-01-A/2025-12-17_cap_analysis"
+BASE_DIR="/Volumes/KGW/iPSC_Early_Differentiation/REP_1_163-d1Ars_PB-analysis"
 
 # Find all directories that DON'T end with _BS (these are the source directories)
 for base_name in "${BASE_DIR}"/*/; do
