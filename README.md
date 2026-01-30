@@ -101,12 +101,12 @@ Each condition folder contains:
 
 2. From the repository directory, run the analysis on the demo data:
 ```bash
-python analyze_intensity.py m7G_demo_data/
+python main.py m7G_demo_data/
 ```
 
    Optionally generate histogram plots for quality control:
 ```bash
-python analyze_intensity.py m7G_demo_data/ --plot-histograms
+python main.py m7G_demo_data/ --plot-histograms
 ```
 
 3. Check the output files in each condition subdirectory:
@@ -126,12 +126,12 @@ python analyze_intensity.py m7G_demo_data/ --plot-histograms
 ### Basic Usage
 
 ```bash
-python analyze_intensity.py /path/to/your/data
+python main.py /path/to/your/data
 ```
 
 Or use the default path:
 ```bash
-python analyze_intensity.py
+python main.py
 ```
 
 ### Command-Line Flags
@@ -146,19 +146,19 @@ python analyze_intensity.py
 
 ```bash
 # Default (no enlargement, no max background constraint, no histogram plots)
-python analyze_intensity.py /path/to/data
+python main.py /path/to/data
 
 # Enlarge background ROIs by 5 pixels
-python analyze_intensity.py /path/to/data --roi-enlargement 5
+python main.py /path/to/data --roi-enlargement 5
 
 # Constrain background peak to values below 100
-python analyze_intensity.py /path/to/data --max-background 100
+python main.py /path/to/data --max-background 100
 
 # Generate histogram plots (saved as *_background_histograms.png per config)
-python analyze_intensity.py /path/to/data --plot-histograms
+python main.py /path/to/data --plot-histograms
 
 # Combine options
-python analyze_intensity.py /path/to/data --roi-enlargement 5 --max-background 100 --plot-histograms
+python main.py /path/to/data --roi-enlargement 5 --max-background 100 --plot-histograms
 ```
 
 #### ROI Enlargement (`--roi-enlargement`)
