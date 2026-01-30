@@ -72,6 +72,8 @@ Or install from a requirements file (if provided):
 pip install -r requirements.txt
 ```
 
+**Typical installation time:** 1–3 minutes on a standard desktop computer with a broadband internet connection. Most of this time is spent downloading packages; actual installation is fast.
+
 ### 4. Verify Installation
 
 ```bash
@@ -82,30 +84,42 @@ python -c "import numpy, PIL, tifffile, matplotlib, scipy, roifile, skimage; pri
 
 ### Sample Data
 
-Sample data will be provided in a future release. The sample dataset will include:
-- Pre-processed intensity images (`.tif` files)
-- ImageJ ROI files (`.zip` files) for P-bodies and stress granules
-- Expected output files for validation
+Demo data is included in the `m7G_demo_data/` directory. The dataset contains two conditions:
+
+| Condition | Description | P-body ROIs | Stress Granule ROIs |
+|-----------|-------------|-------------|---------------------|
+| `Untreated/` | Control cells without stress | 78 | None (no SGs present) |
+| `1Hr_NaAsO2/` | Cells treated with sodium arsenite for 1 hour | 224 | 306 |
+
+Each condition folder contains:
+- Intensity images: `*_Cap_Intensity.tif`, `*_DDX6_Intensity.tif`, and `*_G3BP1_Intensity.tif` (G3BP1 only in stressed condition)
+- ROI files: `*_PB_Mask.zip`, `*_PB_Dilated_Mask.zip`, and SG equivalents (stressed condition only)
 
 ### Running the Demo
 
-Once sample data is available:
+1. Ensure you have completed the installation steps above.
 
-1. Download and extract the sample data to a directory (e.g., `~/sample_data/`)
-
-2. Run the analysis:
+2. From the repository directory, run the analysis on the demo data:
 ```bash
-python analyze_intensity.py ~/sample_data/
+python analyze_intensity.py m7G_demo_data/
 ```
 
-   Optionally specify ROI enlargement and maximum background threshold:
+   Optionally generate histogram plots for quality control:
 ```bash
-python analyze_intensity.py ~/sample_data/ --roi-enlargement 5 --max-background 100
+python analyze_intensity.py m7G_demo_data/ --plot-histograms
 ```
 
 3. Check the output files in each condition subdirectory:
-   - `*_intensity_analysis.csv` - Per-ROI statistics (always generated)
-   - `*_background_histograms.png` - Visualization of detected peaks (only if you used `--plot-histograms`)
+   - `m7G_demo_data/Untreated/Untreated_PB_Cap_intensity_analysis.csv`
+   - `m7G_demo_data/Untreated/Untreated_DDX6_intensity_analysis.csv`
+   - `m7G_demo_data/1Hr_NaAsO2/1Hr_NaAsO2_PB_Cap_intensity_analysis.csv`
+   - `m7G_demo_data/1Hr_NaAsO2/1Hr_NaAsO2_DDX6_intensity_analysis.csv`
+   - `m7G_demo_data/1Hr_NaAsO2/1Hr_NaAsO2_SG_Cap_intensity_analysis.csv`
+   - `m7G_demo_data/1Hr_NaAsO2/1Hr_NaAsO2_G3BP1_intensity_analysis.csv`
+
+   If you used `--plot-histograms`, corresponding `*_background_histograms.png` files will also be generated.
+
+**Expected run time:** Less than 1 minute for the demo dataset on a standard desktop computer. The demo includes 78 P-body ROIs (Untreated) and 224 P-body + 306 stress granule ROIs (1Hr_NaAsO2).
 
 ## Usage
 
