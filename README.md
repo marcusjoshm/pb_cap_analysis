@@ -67,7 +67,7 @@ venv\Scripts\activate
 pip install numpy pillow tifffile matplotlib scipy roifile scikit-image
 ```
 
-Or install from a requirements file (if provided):
+Or install from a requirements file:
 ```bash
 pip install -r requirements.txt
 ```
