@@ -210,7 +210,6 @@ Use a two-level layout: **base directory → one folder per condition**. All con
 ├── Untreated/
 │   ├── Untreated_Cap_Intensity.tif
 │   ├── Untreated_DDX6_Intensity.tif
-│   ├── Untreated_G3BP1_Intensity.tif
 │   ├── Untreated_PB_Mask.zip
 │   └── Untreated_PB_Dilated_Mask.zip
 └── 1Hr_NaAsO2/
@@ -284,8 +283,6 @@ For each successfully analyzed configuration, a CSV file is always written. A hi
 | `background_mean` | Mean of background region intensities |
 | `background_std` | Standard deviation of background region |
 
-**Note**: Negative values may occur when ROI intensity is lower than the detected background. These values are reported as-is in the CSV.
-
 #### Histogram Visualization (`{dataset}_{config}_background_histograms.png`) — optional
 
 Only generated when you pass `--plot-histograms`.
@@ -348,60 +345,6 @@ For each ROI:
 - Reinstall dependencies: `pip install --upgrade numpy pillow tifffile matplotlib scipy roifile scikit-image`
 - Verify Python version: `python --version` (must be 3.8+)
 
-### Performance Tips
-
-- Process smaller batches if memory is limited
-- Close other applications when processing large datasets
-- Use SSD storage for faster file I/O
-
-## ImageJ Macros
-
-The `Macros/` directory contains ImageJ macros for preprocessing:
-
-- **PB_Macro.ijm**: P-body analysis with stress granule subtraction
-- **SG_Macro.ijm**: Stress granule ROI extraction
-- **copy_masks_and_raw.sh**: Organizes raw data into analysis directory structure
-- **copy_ch0_to_processed.sh**: Copies Cap intensity files to processed directories
-
-These macros prepare data for the Python analysis pipeline.
-
-## Workflow Integration
-
-This script is designed to work with outputs from:
-1. **PerCell** analysis software (combined_masks and raw_data directories)
-2. **ImageJ/Fiji** ROI Manager exports
-3. Custom preprocessing pipelines that generate compatible file structures
-
 ## License
 
 MIT License
-
-## Author
-
-Joshua Marcus
-
-## Citation
-
-If you use this software in your research, please cite:
-```
-Marcus, J. (2024). Microscopy Intensity Analysis Pipeline.
-https://github.com/marcusjoshm/pb_cap_analysis
-```
-
-## Contributing
-
-Contributions are welcome! Please submit issues and pull requests to the GitHub repository.
-
-## Changelog
-
-### v2.0.0 (2025-01)
-- Removed background multiplication factor (`bg_factor`) parameter
-- Added dot file filtering for macOS compatibility
-- Improved handling of missing files (graceful skipping)
-- Updated to match PerCell plugin implementation
-- Enhanced documentation and error messages
-
-### v1.0.0 (2024-10)
-- Initial release with per-ROI background subtraction
-- Gaussian peak detection for background estimation
-- Multi-configuration analysis support
